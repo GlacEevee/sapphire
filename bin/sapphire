@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 # sapphire — executable entry point
-# Install: sudo cp this to /usr/local/bin/sapphire && chmod +x /usr/local/bin/sapphire
-# Or add the bin/ dir to your PATH
 
-$LOAD_PATH.unshift(File.expand_path('..', __dir__))
-load File.expand_path('../sapphire.rb', __dir__)
+this_file = File.realpath(__FILE__)
+sapphire_dir = File.expand_path('../..', this_file)
+
+$LOAD_PATH.unshift(sapphire_dir)
+load File.join(sapphire_dir, 'sapphire.rb')
