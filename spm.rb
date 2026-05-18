@@ -218,50 +218,51 @@ module Sapphire
         return
       end
 
-      unless github_configured?
-        puts "  #{yellow("⚠")}  GitHub not configured — cannot download releases."
-        puts ""
-        return
-      end
-
       puts "  #{bold("Installing Sapphire v#{version}...")} (current: v#{iv})"
       puts ""
 
-      # Fetch the per-version manifest from releases/v0.4.0.json etc.
-      manifest_url = "#{RELEASES_INDEX}/v#{version}.json"
-      manifest = begin
-        body = fetch_url(manifest_url)
-        body ? JSON.parse(body) : nil
-      rescue
-        nil
+      # Try local releases/v0.4.0.json first, then GitHub
+      local_manifest_path = File.join(SAPPHIRE_DIR, 'releases', "v#{version}.json")
+      manifest = if File.exist?(local_manifest_path)
+        JSON.parse(File.read(local_manifest_path)) rescue nil
+      elsif github_configured?
+        manifest_url = "#{RELEASES_INDEX}/v#{version}.json"
+        begin
+          body = fetch_url(manifest_url)
+          body ? JSON.parse(body) : nil
+        rescue
+          nil
+        end
       end
 
       if manifest.nil?
         puts "  #{red("✗")}  Could not find release manifest for v#{version}."
-        puts "  Make sure v#{version} exists. Known releases are listed in #{cyan('spm releases')}."
+        puts "  Run #{cyan('spm releases')} to see available versions."
         puts ""
         return
       end
+
+      # Try local bundled zip first (releases/sapphire0_4_0.zip etc.)
+      local_zip = File.join(SAPPHIRE_DIR, 'releases', "sapphire#{version.gsub('.','_')}.zip")
+      # Also try with leading zero stripped for patch (0.4.0 -> sapphire0_4_0.zip)
+      local_zip_alt = File.join(SAPPHIRE_DIR, 'releases', "sapphire0_#{version.split('.')[1]}_#{version.split('.')[2]}.zip")
 
       download_url = manifest["download"]
-      if download_url.nil? || download_url.include?("YOUR_USERNAME")
-        puts "  #{yellow("⚠")}  Download URL not configured in releases/v#{version}.json."
-        puts "  Set the 'download' field to your GitHub release zip URL."
-        puts ""
-        return
-      end
+      use_local_zip = File.exist?(local_zip) || File.exist?(local_zip_alt)
 
-      puts "  #{dim("Downloading from #{download_url}...")}"
+      puts use_local_zip ? "  #{dim(\"Using bundled v#{version} zip...\")}" : "  #{dim(\"Downloading from #{download_url}...\")}"
 
       Dir.mktmpdir do |tmpdir|
-        zip_path = File.join(tmpdir, "sapphire-#{version}.zip")
-
-        # Download the zip
-        downloaded = download_file(download_url, zip_path)
-        unless downloaded
-          puts "  #{red("✗")}  Download failed."
-          puts ""
-          return
+        if use_local_zip
+          zip_path = File.exist?(local_zip) ? local_zip : local_zip_alt
+        else
+          zip_path = File.join(tmpdir, "sapphire-#{version}.zip")
+          downloaded = download_file(download_url, zip_path)
+          unless downloaded
+            puts "  #{red("✗")}  Download failed."
+            puts ""
+            return
+          end
         end
 
         puts "  #{dim("Extracting...")}"
