@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+# spm — Sapphire Manager executable
+$LOAD_PATH.unshift(File.expand_path('..', __dir__))
+load File.expand_path('../spm.rb', __dir__)

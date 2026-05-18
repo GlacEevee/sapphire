@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+# sph — Sapphire Package Manager executable
+$LOAD_PATH.unshift(File.expand_path('..', __dir__))
+load File.expand_path('../sph.rb', __dir__)

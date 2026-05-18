@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+# spm — Sapphire Package Manager executable
+# Install: sudo cp this to /usr/local/bin/spm && chmod +x /usr/local/bin/spm
+
+$LOAD_PATH.unshift(File.expand_path('..', __dir__))
+load File.expand_path('../spm.rb', __dir__)
