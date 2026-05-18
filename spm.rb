@@ -29,7 +29,12 @@ $LOAD_PATH.unshift(__dir__) unless $LOAD_PATH.include?(__dir__)
 module Sapphire
   module Manager
     SPM_VERSION  = "1.1.0"
-    SAPPHIRE_DIR = File.expand_path(__dir__)
+    # Resolve the real directory of spm.rb regardless of how it was invoked
+    SAPPHIRE_DIR = begin
+      File.expand_path(File.dirname(File.realpath(__FILE__)))
+    rescue NotImplementedError
+      File.expand_path(__dir__)
+    end
 
     # ── GitHub config ──────────────────────────────────────────────────────────
     # Fill in your GitHub username once you've created the repo.

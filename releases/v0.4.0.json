@@ -2,8 +2,8 @@
   "version": "0.4.0",
   "released": "2026-05-17",
   "notes": "discordsph v1.4, versioned sph installs, spm rewrite, Gateway WebSocket fix",
-  "download": "https://github.com/YOUR_USERNAME/sapphire/archive/refs/tags/v0.4.0.zip",
-  "install_script": "https://raw.githubusercontent.com/YOUR_USERNAME/sapphire/main/install.sh",
+  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.4.0.zip",
+  "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
   "min_ruby": "3.0.0",
   "packages": {
     "discordsph": {

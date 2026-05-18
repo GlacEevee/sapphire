@@ -37,7 +37,7 @@ git push origin v0.5.0
 ## Update releases/latest.json download URL
 
 Once pushed, edit `releases/latest.json` and `releases/v0.4.0.json` and replace
-`YOUR_USERNAME` with `GlacEevee` in the download URLs:
+`GlacEevee` with `GlacEevee` in the download URLs:
 
 ```json
 "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.0.zip"

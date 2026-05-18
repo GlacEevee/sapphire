@@ -2,8 +2,8 @@
   "version": "0.5.0",
   "released": "2026-05-18",
   "notes": "Ctrl+C crash fix, community packages via sph (GitHub), COMMUNITY_PACKAGES.md",
-  "download": "https://github.com/YOUR_USERNAME/sapphire/archive/refs/tags/v0.5.0.zip",
-  "install_script": "https://raw.githubusercontent.com/YOUR_USERNAME/sapphire/main/install.sh",
+  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.0.zip",
+  "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
   "min_ruby": "3.0.0",
   "packages": {
     "discordsph": {
