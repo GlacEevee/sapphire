@@ -1,0 +1,116 @@
+Sapphire Language License
+Version 1.0, 2026
+
+Copyright (c) 2026 GlacEevee. All rights reserved.
+
+─────────────────────────────────────────────────────────────────────────────
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+
+   "Software" refers to the Sapphire programming language, including its
+   interpreter, standard library, package manager (sph), system manager (spm),
+   and all associated source files distributed in this repository.
+
+   "Author" refers to the original copyright holder of the Software.
+
+   "You" refers to any individual or entity using, copying, or interacting
+   with the Software.
+
+   "Modified Version" refers to any copy of the Software in which any part
+   has been altered, extended, translated, or adapted from the original.
+
+   "Official Release" refers to any version of the Software published by the
+   Author through the official repository at github.com/YOUR_USERNAME/sapphire.
+
+─────────────────────────────────────────────────────────────────────────────
+
+2. PERMISSIONS — what you ARE allowed to do
+
+   a) Use the Software for any personal, educational, or commercial purpose,
+      including building bots, tools, scripts, and applications.
+
+   b) Modify the Software locally for your own personal use.
+
+   c) Share your own programs and projects written in Sapphire freely,
+      without restriction.
+
+   d) Contribute improvements, bug reports, and suggestions to the Author
+      via the official repository.
+
+─────────────────────────────────────────────────────────────────────────────
+
+3. RESTRICTIONS — what you are NOT allowed to do
+
+   a) You may NOT redistribute, republish, mirror, or host the Software or
+      any Modified Version of it, in whole or in part, on any platform,
+      repository, package registry, or website — without explicit written
+      permission from the Author.
+
+   b) You may NOT publish or distribute Modified Versions of the Software
+      as updates, forks, or replacements for the original, regardless of
+      the changes made.
+
+   c) You may NOT remove, alter, or obscure this license, the copyright
+      notice, or any attribution to the original Author from any copy or
+      portion of the Software.
+
+   d) You may NOT claim authorship of the Software or represent a Modified
+      Version as your own original work.
+
+   e) You may NOT use the name "Sapphire", the project branding, or any
+      associated logos or marks to endorse or promote derivative works
+      without explicit written permission from the Author.
+
+─────────────────────────────────────────────────────────────────────────────
+
+4. CONTRIBUTIONS
+
+   If you submit code, documentation, or other material to the official
+   Sapphire repository (e.g. via pull request), you agree that:
+
+   a) The Author retains full copyright over the contribution once merged.
+
+   b) You grant the Author a perpetual, irrevocable right to use, modify,
+      and redistribute your contribution as part of the Software.
+
+   c) You will not be credited as a co-author of the Software unless the
+      Author explicitly agrees in writing.
+
+─────────────────────────────────────────────────────────────────────────────
+
+5. OFFICIAL UPDATES
+
+   Updates, new versions, and official releases of the Software are
+   published solely by the Author. Third parties may not publish releases,
+   patches, or version updates — even if based on bug fixes or improvements
+   — without explicit written permission from the Author.
+
+   If you discover a bug or vulnerability, please report it via the official
+   repository's issue tracker rather than publishing an independent fix.
+
+─────────────────────────────────────────────────────────────────────────────
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
+   FROM THE USE OF OR INABILITY TO USE THE SOFTWARE.
+
+─────────────────────────────────────────────────────────────────────────────
+
+7. TERMINATION
+
+   Your rights under this license terminate automatically if you violate any
+   of the terms above. Upon termination you must cease all use and destroy
+   any copies of the Software in your possession.
+
+─────────────────────────────────────────────────────────────────────────────
+
+For permissions beyond the scope of this license, contact the Author via
+the official Sapphire repository.
+
+  github.com/YOUR_USERNAME/sapphire
