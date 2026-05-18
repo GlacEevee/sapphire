@@ -16,6 +16,11 @@ module Sapphire
       eval_node(program, @globals)
     rescue ReturnSignal => e
       e.value
+    rescue Interrupt
+      # Clean Ctrl+C exit — stop any running gateway and exit silently
+      @_gateway_running = false if defined?(@_gateway_running)
+      puts ""   # newline after the ^C that the terminal prints
+      exit 0
     end
 
     private
@@ -970,7 +975,10 @@ module Sapphire
             begin
               chunk = ssl.read_nonblock(65536)
               driver.parse(chunk)
-            rescue IO::WaitReadable
+            rescue Interrupt
+              @_gateway_running = false
+              break
+            rescue IO::WaitReadable, OpenSSL::SSL::SSLErrorWaitReadable
               IO.select([ssl], nil, nil, 0.1)
             rescue => e
               puts "[GATEWAY] Connection error: #{e.message}"

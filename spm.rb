@@ -37,7 +37,8 @@ module Sapphire
     GITHUB_REPO       = "sapphire"
     GITHUB_BRANCH     = "main"
     GITHUB_BASE       = "https://raw.githubusercontent.com/#{GITHUB_USER}/#{GITHUB_REPO}/#{GITHUB_BRANCH}"
-    RELEASES_MANIFEST = "#{GITHUB_BASE}/releases/latest.json"
+    RELEASES_MANIFEST  = "#{GITHUB_BASE}/releases/latest.json"
+    RELEASES_INDEX     = "#{GITHUB_BASE}/releases"   # versioned jsons live here as v0.4.0.json etc.
     GITHUB_API_LATEST = "https://api.github.com/repos/#{GITHUB_USER}/#{GITHUB_REPO}/releases/latest"
 
     # Local paths
@@ -202,6 +203,136 @@ module Sapphire
         end
       rescue LoadError; end
 
+      puts ""
+    end
+
+    # Install a specific Sapphire interpreter version
+    def self.cmd_install_version(version)
+      version = version.gsub(/\Av/i, '')  # strip leading 'v'
+      iv = installed_version
+      puts ""
+
+      if gem_ver(version) == gem_ver(iv)
+        puts "  #{green("✓")}  Sapphire v#{version} is already installed."
+        puts ""
+        return
+      end
+
+      unless github_configured?
+        puts "  #{yellow("⚠")}  GitHub not configured — cannot download releases."
+        puts ""
+        return
+      end
+
+      puts "  #{bold("Installing Sapphire v#{version}...")} (current: v#{iv})"
+      puts ""
+
+      # Fetch the per-version manifest from releases/v0.4.0.json etc.
+      manifest_url = "#{RELEASES_INDEX}/v#{version}.json"
+      manifest = begin
+        body = fetch_url(manifest_url)
+        body ? JSON.parse(body) : nil
+      rescue
+        nil
+      end
+
+      if manifest.nil?
+        puts "  #{red("✗")}  Could not find release manifest for v#{version}."
+        puts "  Make sure v#{version} exists. Known releases are listed in #{cyan('spm releases')}."
+        puts ""
+        return
+      end
+
+      download_url = manifest["download"]
+      if download_url.nil? || download_url.include?("YOUR_USERNAME")
+        puts "  #{yellow("⚠")}  Download URL not configured in releases/v#{version}.json."
+        puts "  Set the 'download' field to your GitHub release zip URL."
+        puts ""
+        return
+      end
+
+      puts "  #{dim("Downloading from #{download_url}...")}"
+
+      Dir.mktmpdir do |tmpdir|
+        zip_path = File.join(tmpdir, "sapphire-#{version}.zip")
+
+        # Download the zip
+        downloaded = download_file(download_url, zip_path)
+        unless downloaded
+          puts "  #{red("✗")}  Download failed."
+          puts ""
+          return
+        end
+
+        puts "  #{dim("Extracting...")}"
+        result = system("unzip -q '#{zip_path}' -d '#{tmpdir}'")
+        unless result
+          puts "  #{red("✗")}  Extraction failed. Is 'unzip' installed?"
+          puts ""
+          return
+        end
+
+        # Find the extracted sapphire dir (zip may be named sapphire-0.4.0/ or sapphire/)
+        extracted = Dir[File.join(tmpdir, "sapphire*/")].first || Dir[File.join(tmpdir, "*/")].first
+        unless extracted
+          puts "  #{red("✗")}  Could not find extracted directory."
+          puts ""
+          return
+        end
+
+        # Run the install script from the downloaded version
+        install_sh = File.join(extracted, 'install.sh')
+        if File.exist?(install_sh)
+          puts "  #{dim("Running installer for v#{version}...")}"
+          puts ""
+          success = system("bash '#{install_sh}' --user")
+          if success
+            puts ""
+            puts "  #{green("✓  Sapphire v#{version} installed successfully.")}"
+            puts "  Restart your shell if the version doesn't update immediately."
+          else
+            puts "  #{red("✗")}  Installer exited with an error."
+          end
+        else
+          # Fallback: copy files directly over the current install
+          puts "  #{dim("Copying files to #{SAPPHIRE_DIR}...")}"
+          FileUtils.cp_r(Dir[File.join(extracted, '*')], SAPPHIRE_DIR)
+          File.write(VERSION_FILE, version)
+          puts "  #{green("✓  Sapphire v#{version} installed (direct copy).")}"
+        end
+
+        File.delete(CACHE_FILE) if File.exist?(CACHE_FILE)
+      end
+      puts ""
+    end
+
+    # List all known release versions
+    def self.cmd_releases
+      puts ""
+      puts bold("  Known Sapphire releases:")
+      puts ""
+
+      # Local releases dir
+      releases_dir = File.join(SAPPHIRE_DIR, 'releases')
+      local_jsons  = Dir[File.join(releases_dir, 'v*.json')].sort
+
+      if local_jsons.empty?
+        puts "  #{dim("No local release manifests found in releases/")}"
+      else
+        local_jsons.each do |path|
+          data = JSON.parse(File.read(path)) rescue {}
+          ver  = data["version"] || File.basename(path, '.json').sub('v','')
+          date = data["released"] ? "  (#{data['released']})" : ""
+          note = data["notes"] ? "  #{dim(data['notes'])}" : ""
+          current = gem_ver(ver) == gem_ver(installed_version) ? "  #{green("← current")}" : ""
+          puts "    #{cyan("v#{ver}")}#{date}#{current}"
+          puts "    #{note}" unless note.empty?
+          puts ""
+        end
+      end
+
+      puts "  Install a version:  #{cyan("spm install <version>")}"
+      puts "  Example:            #{cyan("spm install 0.4.0")}"
       puts ""
     end
 
@@ -388,6 +519,20 @@ module Sapphire
       nil
     end
 
+    def self.download_file(url, dest)
+      uri = URI.parse(url)
+      Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
+                      verify_mode: OpenSSL::SSL::VERIFY_PEER,
+                      open_timeout: 10, read_timeout: 60) do |http|
+        resp = http.get(uri.request_uri)
+        return false unless resp.code == "200"
+        File.binwrite(dest, resp.body)
+        true
+      end
+    rescue => e
+      false
+    end
+
     # ── proxy to sph ──────────────────────────────────────────────────────────
 
     def self.proxy_to_sph(args)
@@ -412,7 +557,9 @@ module Sapphire
       puts "    #{cyan('spm changelog')}            View the changelog"
       puts ""
       puts "  #{bold('Packages')} #{dim('(same as sph):')}"
-      puts "    #{cyan('spm install <pkg> [ver]')}  Install a package or specific version"
+      puts "    #{cyan('spm install <version>')}     Install a specific Sapphire version (e.g. 0.4.0)"
+      puts "    #{cyan('spm releases')}              List all known Sapphire releases"
+      puts "    #{cyan('spm install <pkg> [ver]')}   Install a package (proxied to sph)"
       puts "    #{cyan('spm remove <pkg>')}         Remove a package"
       puts "    #{cyan('spm list')}                 List installed packages"
       puts "    #{cyan('spm search [query]')}       Search the registry"
@@ -438,6 +585,17 @@ module Sapphire
         cmd_status
       when 'changelog', 'changes'
         cmd_changelog
+      when 'install', 'add'
+        # If arg looks like a version number (e.g. 0.4.0 or v0.4.0), install that Sapphire version.
+        # Otherwise proxy to sph for package installs.
+        second = args[1]
+        if second && second.match?(/\Av?\d+\.\d+/)
+          cmd_install_version(second)
+        else
+          proxy_to_sph(args)
+        end
+      when 'releases', 'versions'
+        cmd_releases
       when 'help', '--help', '-h', nil
         puts_help
       else

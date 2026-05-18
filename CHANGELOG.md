@@ -5,6 +5,20 @@ Format: `## [version] — YYYY-MM-DD`
 
 ---
 
+## [0.5.0] — 2026-05-18
+
+### Bug Fixes
+- Fixed `Ctrl+C` (SIGINT) crash — now exits cleanly from both the gateway WebSocket loop and the interpreter top-level
+- `OpenSSL::SSL::SSLErrorWaitReadable` now handled correctly in the gateway read loop (no more spurious stack trace on interrupt)
+
+### Tooling
+- `sph search` now searches community packages published on GitHub (repos tagged `sapphire-package`)
+- `sph install <user>/<repo>` installs a community package directly from a GitHub repository
+- `sph install <user>/<repo>@<tag>` installs a specific release tag
+- Added `COMMUNITY_PACKAGES.md` — guide for publishing your own Sapphire package
+
+---
+
 ## [0.4.0] — 2026-05-17
 
 ### Language
