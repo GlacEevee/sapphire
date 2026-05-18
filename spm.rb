@@ -23,6 +23,7 @@ require 'net/http'
 require 'net/https'
 require 'uri'
 require 'tmpdir'
+require 'tempfile'
 
 $LOAD_PATH.unshift(__dir__) unless $LOAD_PATH.include?(__dir__)
 

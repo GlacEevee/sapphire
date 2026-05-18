@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 USER_INSTALL=false
-SAPPHIRE_VERSION="0.4.0"
+SAPPHIRE_VERSION=$(cat "$SCRIPT_DIR/SAPPHIRE_VERSION" 2>/dev/null || echo "unknown")
 
 for arg in "$@"; do
   [[ "$arg" == "--user" ]] && USER_INSTALL=true
