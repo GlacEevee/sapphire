@@ -255,7 +255,11 @@ module Sapphire
       download_url = manifest["download"]
       use_local_zip = File.exist?(local_zip) || File.exist?(local_zip_alt)
 
-      puts use_local_zip ? "  #{dim(\"Using bundled v#{version} zip...\")}" : "  #{dim(\"Downloading from #{download_url}...\")}"
+      if use_local_zip
+        puts "  " + dim("Using bundled v#{version} zip...")
+      else
+        puts "  " + dim("Downloading from #{download_url}...")
+      end
 
       Dir.mktmpdir do |tmpdir|
         if use_local_zip
