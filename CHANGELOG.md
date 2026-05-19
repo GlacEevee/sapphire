@@ -5,6 +5,21 @@ Format: `## [version] — YYYY-MM-DD`
 
 ---
 
+## [0.5.1] — 2026-05-19
+
+### New Features
+- `media` stdlib package — view photos and play videos directly from Sapphire scripts
+  - `media.view(path)` — show an image (framebuffer via `fim` when headless, `feh` when X is available)
+  - `media.view_ascii(path)` — show an image as ASCII/ANSI art, works over any plain SSH connection
+  - `media.play(path)` — play a video (`mpv --vo=drm` for headless Pi, no X needed)
+  - `media.slideshow(paths, delay)` — cycle through multiple images
+  - `media.image_info(path)` / `media.video_info(path)` — get file metadata
+  - `media.status()` — show which viewers are installed
+  - `media.setup()` — auto-install `fim`, `mpv`, `jp2a`, `ffmpeg` via apt
+- `Media` native object in interpreter exposing all media operations to Sapphire
+
+---
+
 ## [0.5.0] — 2026-05-18
 
 ### Bug Fixes

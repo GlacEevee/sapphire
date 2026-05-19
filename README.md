@@ -4,7 +4,7 @@
 
 **A clean, expressive scripting language built in Ruby.**
 
-![Version](https://img.shields.io/badge/version-0.5.0-purple)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![Ruby](https://img.shields.io/badge/ruby-3.0%2B-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi-lightgrey)

@@ -60,6 +60,7 @@ module Sapphire
       "datetime"    => { version: "1.0.0", description: "Date and time utilities", stdlib: true,  file: "datetime.sp" },
       "test"        => { version: "1.0.0", description: "Minimalist unit testing framework for Sapphire", stdlib: true,  file: "test.sp" },
       "http"        => { version: "1.0.0", description: "Simple HTTP client (get/post)", stdlib: true,  file: "http.sp" },
+      "media"       => { version: "1.0.0", description: "Photo and video viewer — headless Pi friendly (framebuffer, no X needed)", stdlib: true,  file: "media.sp" },
       "discordsph"  => {
         version: "1.4.0",
         description: "Discord bot framework: client, commands, embeds, gateway events",

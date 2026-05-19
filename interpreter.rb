@@ -997,6 +997,218 @@ module Sapphire
       }))
     end
 
+
+      # ── Media native (images + video, headless Pi friendly) ───────────────────
+      @globals.define('Media', SapphireHash.new({
+
+        # Check if a command exists on the system
+        'has_cmd' => NativeFunction.new('has_cmd') { |cmd|
+          system("which #{cmd.shellescape} > /dev/null 2>&1")
+        },
+
+        # Detect if we have a display (X11 forwarding or local X)
+        'has_display' => NativeFunction.new('has_display') {
+          !ENV['DISPLAY'].to_s.empty? || !ENV['WAYLAND_DISPLAY'].to_s.empty?
+        },
+
+        # Install a package via apt (returns true on success)
+        'apt_install' => NativeFunction.new('apt_install') { |pkg|
+          puts "  Installing #{pkg} via apt..."
+          system("sudo apt-get install -y #{pkg.shellescape} > /dev/null 2>&1")
+        },
+
+        # Show an image — uses fim (framebuffer, no X) or feh (X11)
+        'show_image' => NativeFunction.new('show_image') { |path, opts = nil|
+          require 'shellwords'
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Media.show_image: file not found: #{path}"
+            next false
+          end
+
+          has_display = !ENV['DISPLAY'].to_s.empty? || !ENV['WAYLAND_DISPLAY'].to_s.empty?
+
+          if has_display
+            # X11 available — prefer feh, fallback to display (ImageMagick)
+            if system("which feh > /dev/null 2>&1")
+              system("feh #{path.shellescape}")
+            elsif system("which display > /dev/null 2>&1")
+              system("display #{path.shellescape}")
+            elsif system("which eog > /dev/null 2>&1")
+              system("eog #{path.shellescape}")
+            else
+              puts "No image viewer found. Install one with: spm media-setup"
+              next false
+            end
+          else
+            # Headless / SSH — use fim (framebuffer image viewer)
+            if system("which fim > /dev/null 2>&1")
+              system("fim -q #{path.shellescape}")
+            elsif system("which fbi > /dev/null 2>&1")
+              system("fbi -T 2 -noverbose #{path.shellescape}")
+            else
+              puts "No framebuffer image viewer found. Install with:"
+              puts "  sudo apt-get install fim"
+              next false
+            end
+          end
+          true
+        },
+
+        # Play a video — uses mpv with DRM/framebuffer output for headless
+        'play_video' => NativeFunction.new('play_video') { |path, opts = nil|
+          require 'shellwords'
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Media.play_video: file not found: #{path}"
+            next false
+          end
+
+          has_display = !ENV['DISPLAY'].to_s.empty? || !ENV['WAYLAND_DISPLAY'].to_s.empty?
+
+          if system("which mpv > /dev/null 2>&1")
+            if has_display
+              system("mpv #{path.shellescape}")
+            else
+              # Headless: DRM output (direct to framebuffer, no X needed)
+              system("mpv --vo=drm #{path.shellescape}")
+            end
+          elsif system("which vlc > /dev/null 2>&1")
+            if has_display
+              system("vlc #{path.shellescape}")
+            else
+              system("cvlc --vout fb #{path.shellescape}")
+            end
+          elsif system("which mplayer > /dev/null 2>&1")
+            if has_display
+              system("mplayer #{path.shellescape}")
+            else
+              system("mplayer -vo fbdev #{path.shellescape}")
+            end
+          else
+            puts "No video player found. Install with:"
+            puts "  sudo apt-get install mpv"
+            next false
+          end
+          true
+        },
+
+        # Show image in terminal using ASCII/ANSI art (works over pure SSH with no framebuffer)
+        'show_image_ascii' => NativeFunction.new('show_image_ascii') { |path, width = 80|
+          require 'shellwords'
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Media.show_image_ascii: file not found: #{path}"
+            next false
+          end
+          if system("which viu > /dev/null 2>&1")
+            system("viu -w #{width.to_i} #{path.shellescape}")
+          elsif system("which catimg > /dev/null 2>&1")
+            system("catimg -w #{width.to_i} #{path.shellescape}")
+          elsif system("which jp2a > /dev/null 2>&1")
+            system("jp2a --width=#{width.to_i} #{path.shellescape}")
+          else
+            puts "No terminal image viewer found. Install one with:"
+            puts "  cargo install viu        # best quality (requires Rust)"
+            puts "  sudo apt-get install jp2a  # ASCII fallback"
+            next false
+          end
+          true
+        },
+
+        # Slideshow: show multiple images one after another
+        'slideshow' => NativeFunction.new('slideshow') { |paths, delay = 3|
+          require 'shellwords'
+          has_display = !ENV['DISPLAY'].to_s.empty? || !ENV['WAYLAND_DISPLAY'].to_s.empty?
+          paths.elements.each do |path|
+            path = File.expand_path(path)
+            next unless File.exist?(path)
+            if has_display && system("which feh > /dev/null 2>&1")
+              pid = spawn("feh #{path.shellescape}")
+              sleep(delay)
+              Process.kill('TERM', pid) rescue nil
+              Process.wait(pid) rescue nil
+            elsif system("which fim > /dev/null 2>&1")
+              system("fim -q -T #{delay.to_i} #{path.shellescape}")
+            end
+          end
+          true
+        },
+
+        # Get image info (dimensions, format) using ImageMagick identify
+        'image_info' => NativeFunction.new('image_info') { |path|
+          require 'shellwords'
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            next SapphireHash.new({})
+          end
+          if system("which identify > /dev/null 2>&1")
+            out = `identify -verbose #{path.shellescape} 2>/dev/null`
+            info = {}
+            out.each_line do |line|
+              info['width']  = $1.to_i if line =~ /Geometry: (\d+)x/
+              info['height'] = $1.to_i if line =~ /Geometry: \d+x(\d+)/
+              info['format'] = $1       if line =~ /Format: (\w+)/
+            end
+            ruby_to_sapphire(info)
+          else
+            ruby_to_sapphire({ 'path' => path, 'exists' => true })
+          end
+        },
+
+        # Get video info using ffprobe
+        'video_info' => NativeFunction.new('video_info') { |path|
+          require 'shellwords'
+          require 'json'
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            next SapphireHash.new({})
+          end
+          if system("which ffprobe > /dev/null 2>&1")
+            out = `ffprobe -v quiet -print_format json -show_format -show_streams #{path.shellescape} 2>/dev/null`
+            begin
+              data = ::JSON.parse(out)
+              fmt  = data['format'] || {}
+              ruby_to_sapphire({
+                'duration' => fmt['duration'].to_f,
+                'size'     => fmt['size'].to_i,
+                'format'   => fmt['format_long_name'],
+                'path'     => path,
+              })
+            rescue
+              ruby_to_sapphire({ 'path' => path, 'exists' => true })
+            end
+          else
+            ruby_to_sapphire({ 'path' => path, 'exists' => true })
+          end
+        },
+
+        # Setup helper: install recommended tools for headless Pi
+        'setup' => NativeFunction.new('setup') {
+          puts "Installing media tools for headless Raspberry Pi..."
+          puts ""
+          tools = [
+            ['fim',        'Framebuffer image viewer (no X needed)'],
+            ['mpv',        'Video player with DRM/framebuffer output'],
+            ['jp2a',       'ASCII image viewer (works over plain SSH)'],
+            ['ffmpeg',     'Video processing + ffprobe for video info'],
+            ['imagemagick','Image info and conversion'],
+          ]
+          tools.each do |pkg, desc|
+            if system("which #{pkg.split('/').last.shellescape} > /dev/null 2>&1")
+              puts "  ✓ #{pkg.ljust(14)} already installed"
+            else
+              print "  ↓ Installing #{pkg.ljust(14)} (#{desc})... "
+              ok = system("sudo apt-get install -y #{pkg.shellescape} > /dev/null 2>&1")
+              puts ok ? "done" : "FAILED (try manually: sudo apt install #{pkg})"
+            end
+          end
+          puts ""
+          puts "Done! Try: Media.show_image(\"path/to/photo.jpg\")"
+        },
+
+      }))
+
     # ── Ruby <-> Sapphire conversion helpers ──────────────────────────────────
 
     def ruby_to_sapphire(val)

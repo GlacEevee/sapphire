@@ -1,8 +1,8 @@
 {
-  "version": "0.5.0",
-  "released": "2026-05-18",
-  "notes": "Ctrl+C crash fix, community packages via sph (GitHub), COMMUNITY_PACKAGES.md",
-  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.0.zip",
+  "version": "0.5.1",
+  "released": "2026-05-19",
+  "notes": "media stdlib: photo/video viewer, headless Pi framebuffer support",
+  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.1.zip",
   "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
   "min_ruby": "3.0.0",
   "packages": {
@@ -16,8 +16,14 @@
         "1.4.0": "stdlib/discordsph_v1.4.sp"
       }
     },
-    "dotenv": { "latest": "1.0.0" },
-    "math":   { "latest": "1.0.0" },
-    "strings":{ "latest": "1.0.0" }
+    "dotenv": {
+      "latest": "1.0.0"
+    },
+    "math": {
+      "latest": "1.0.0"
+    },
+    "strings": {
+      "latest": "1.0.0"
+    }
   }
 }
