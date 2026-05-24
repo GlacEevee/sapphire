@@ -1,8 +1,8 @@
 {
   "version": "0.5.0",
   "released": "2026-05-18",
-  "notes": "Ctrl+C crash fix, community packages via sph (GitHub), COMMUNITY_PACKAGES.md",
-  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.0.zip",
+  "notes": "Ctrl+C crash fix, community packages via sph (GitHub), COMMUNITY_PACKAGES.md [download redirected to v0.5.1 for spm fix]",
+  "download": "https://github.com/GlacEevee/sapphire/archive/refs/tags/v0.5.1.zip",
   "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
   "min_ruby": "3.0.0"
 }

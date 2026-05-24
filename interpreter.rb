@@ -995,9 +995,6 @@ module Sapphire
         },
         'send_payload' => NativeFunction.new('send_payload') { |token, payload| nil },
       }))
-    end
-
-
       # ── Media native (images + video, headless Pi friendly) ───────────────────
       @globals.define('Media', SapphireHash.new({
 
@@ -1208,6 +1205,9 @@ module Sapphire
         },
 
       }))
+
+
+    end  # end setup_globals
 
     # ── Ruby <-> Sapphire conversion helpers ──────────────────────────────────
 
