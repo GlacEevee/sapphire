@@ -34,7 +34,21 @@ else
   echo "✓  websocket-driver installed"
 fi
 
-# ── Determine install dir ─────────────────────────────────────────────────────
+# ── Copy source to permanent location ────────────────────────────────────────
+# This ensures wrappers always point to a stable path, not a temp dir.
+
+SAPPHIRE_SRC="$HOME/.sapphire/src"
+mkdir -p "$SAPPHIRE_SRC"
+
+echo "⬇  Copying Sapphire source → $SAPPHIRE_SRC"
+rsync -a --exclude=".git" "$SCRIPT_DIR/" "$SAPPHIRE_SRC/" 2>/dev/null || \
+  cp -r "$SCRIPT_DIR/." "$SAPPHIRE_SRC/" --no-preserve=mode 2>/dev/null || \
+  find "$SCRIPT_DIR" -not -path "*/.git*" -not -path "*/.git" | while read f; do
+    dest="$SAPPHIRE_SRC${f#$SCRIPT_DIR}"
+    if [ -d "$f" ]; then mkdir -p "$dest"; else cp "$f" "$dest" 2>/dev/null; fi
+  done
+
+# ── Determine bin install dir ─────────────────────────────────────────────────
 
 if $USER_INSTALL; then
   INSTALL_DIR="$HOME/bin"
@@ -43,17 +57,17 @@ else
   INSTALL_DIR="/usr/local/bin"
 fi
 
-# ── Create wrapper scripts ────────────────────────────────────────────────────
+# ── Create wrapper scripts pointing at the permanent src location ─────────────
 
 create_wrapper() {
   local name="$1"
   local script="$2"
   local dest="$INSTALL_DIR/$name"
 
-  cat > /tmp/sapphire_wrapper_$name <<EOF
+  cat > /tmp/sapphire_wrapper_$name << EOF
 #!/usr/bin/env ruby
-\$LOAD_PATH.unshift("$SCRIPT_DIR")
-load "$SCRIPT_DIR/$script"
+\$LOAD_PATH.unshift("$SAPPHIRE_SRC")
+load "$SAPPHIRE_SRC/$script"
 EOF
 
   if $USER_INSTALL; then
@@ -76,14 +90,14 @@ create_wrapper "spm" "spm.rb"
 
 # ── Write version marker ──────────────────────────────────────────────────────
 
-echo "$SAPPHIRE_VERSION" > "$SCRIPT_DIR/SAPPHIRE_VERSION"
+echo "$SAPPHIRE_VERSION" > "$SAPPHIRE_SRC/SAPPHIRE_VERSION"
 echo "✓  Version marker written ($SAPPHIRE_VERSION)"
 
 # ── Set up ~/.sapphire directory ──────────────────────────────────────────────
 
-SAPPHIRE_HOME="$HOME/.sapphire"
-mkdir -p "$SAPPHIRE_HOME/packages"
-echo "✓  Created $SAPPHIRE_HOME"
+mkdir -p "$HOME/.sapphire/packages"
+mkdir -p "$HOME/.sapphire/meta"
+echo "✓  Created $HOME/.sapphire"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
@@ -105,7 +119,7 @@ echo "  spm self-update          Update Sapphire"
 echo "  spm status               Full environment status"
 echo "  spm install <pkg>        Install a package (same as sph)"
 echo ""
-echo "Try: sapphire $SCRIPT_DIR/examples/fizzbuzz.sp"
+echo "Try: sapphire $SAPPHIRE_SRC/examples/fizzbuzz.sp"
 
 if $USER_INSTALL; then
   if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then

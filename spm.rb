@@ -48,6 +48,7 @@ module Sapphire
     GITHUB_API_LATEST = "https://api.github.com/repos/#{GITHUB_USER}/#{GITHUB_REPO}/releases/latest"
 
     # Local paths
+    SAPPHIRE_SRC   = File.join(Dir.home, '.sapphire', 'src')
     VERSION_FILE   = File.join(SAPPHIRE_DIR, 'SAPPHIRE_VERSION')
     CHANGELOG_FILE = File.join(SAPPHIRE_DIR, 'CHANGELOG.md')
     CACHE_FILE     = File.join(Dir.home, '.sapphire', 'update_cache.json')
@@ -267,9 +268,10 @@ module Sapphire
           zip_path = File.exist?(local_zip) ? local_zip : local_zip_alt
         else
           zip_path = File.join(tmpdir, "sapphire-#{version}.zip")
-          downloaded = download_file(download_url, zip_path)
+          downloaded, dl_err = download_file(download_url, zip_path)
           unless downloaded
-            puts "  #{red("✗")}  Download failed."
+            puts "  #{red("✗")}  Download failed: #{dl_err}"
+            puts "  URL: #{download_url}"
             puts ""
             return
           end
@@ -283,7 +285,7 @@ module Sapphire
           return
         end
 
-        # Find the extracted sapphire dir (zip may be named sapphire-0.4.0/ or sapphire/)
+        # Find the extracted sapphire dir (zip may be named sapphire-0.5.0/ or sapphire/)
         extracted = Dir[File.join(tmpdir, "sapphire*/")].first || Dir[File.join(tmpdir, "*/")].first
         unless extracted
           puts "  #{red("✗")}  Could not find extracted directory."
@@ -291,26 +293,36 @@ module Sapphire
           return
         end
 
-        # Run the install script from the downloaded version
-        install_sh = File.join(extracted, 'install.sh')
-        if File.exist?(install_sh)
-          puts "  #{dim("Running installer for v#{version}...")}"
-          puts ""
-          success = system("bash '#{install_sh}' --user")
-          if success
-            puts ""
-            puts "  #{green("✓  Sapphire v#{version} installed successfully.")}"
-            puts "  Restart your shell if the version doesn't update immediately."
-          else
-            puts "  #{red("✗")}  Installer exited with an error."
-          end
-        else
-          # Fallback: copy files directly over the current install
-          puts "  #{dim("Copying files to #{SAPPHIRE_DIR}...")}"
-          FileUtils.cp_r(Dir[File.join(extracted, '*')], SAPPHIRE_DIR)
-          File.write(VERSION_FILE, version)
-          puts "  #{green("✓  Sapphire v#{version} installed (direct copy).")}"
+        # Copy extracted zip files into ~/.sapphire/src
+        puts "  #{dim("Installing v#{version} to #{SAPPHIRE_SRC}...")}"
+        src_dest = SAPPHIRE_SRC
+        FileUtils.mkdir_p(src_dest)
+
+        Dir[File.join(extracted, '*')].each do |f|
+          FileUtils.cp_r(f, src_dest)
         end
+
+        # Always write the correct version — never trust what's in the zip
+        File.write(File.join(src_dest, 'SAPPHIRE_VERSION'), version)
+
+        # Rewrite bin wrappers directly — never run install.sh from the zip
+        # (old zips have hardcoded versions in install.sh)
+        puts "  #{dim("Updating bin wrappers...")}"
+        bin_dir   = File.join(Dir.home, 'bin')
+        FileUtils.mkdir_p(bin_dir)
+        wrappers  = { 'sapphire' => 'sapphire.rb', 'sph' => 'sph.rb', 'spm' => 'spm.rb' }
+        wrappers.each do |name, script|
+          wrapper_path = File.join(bin_dir, name)
+          wrapper_content = "#!/usr/bin/env ruby\n" \
+                            "$LOAD_PATH.unshift('#{src_dest}')\n" \
+                            "load '#{src_dest}/#{script}'\n"
+          File.write(wrapper_path, wrapper_content)
+          File.chmod(0755, wrapper_path)
+        end
+
+        puts ""
+        puts "  #{green("✓  Sapphire v#{version} installed successfully.")}"
+        puts "  Run: source ~/.bashrc  (or open a new terminal)"
 
         File.delete(CACHE_FILE) if File.exist?(CACHE_FILE)
       end
@@ -517,31 +529,56 @@ module Sapphire
 
     # ── fetch helper ───────────────────────────────────────────────────────────
 
-    def self.fetch_url(url)
+    def self.fetch_url(url, redirect_limit = 10)
+      return nil if redirect_limit == 0
       uri  = URI.parse(url)
       http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl     = uri.scheme == 'https'
-      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      http.open_timeout = 8
-      http.read_timeout = 15
-      resp = http.get(uri.request_uri)
-      resp.code == "200" ? resp.body : nil
+      http.use_ssl      = uri.scheme == 'https'
+      http.verify_mode  = OpenSSL::SSL::VERIFY_PEER
+      http.open_timeout = 15
+      http.read_timeout = 30
+      req = Net::HTTP::Get.new(uri.request_uri)
+      req['User-Agent'] = "spm/#{SPM_VERSION} Sapphire-Package-Manager"
+      resp = http.request(req)
+      case resp.code
+      when "200"
+        resp.body
+      when "301", "302", "303", "307", "308"
+        fetch_url(resp['location'], redirect_limit - 1)
+      else
+        nil
+      end
     rescue
       nil
     end
 
-    def self.download_file(url, dest)
+    def self.download_file(url, dest, redirect_limit = 10)
+      return [false, "Too many redirects"] if redirect_limit == 0
       uri = URI.parse(url)
-      Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https',
+      Net::HTTP.start(uri.host, uri.port,
+                      use_ssl: uri.scheme == 'https',
                       verify_mode: OpenSSL::SSL::VERIFY_PEER,
-                      open_timeout: 10, read_timeout: 60) do |http|
-        resp = http.get(uri.request_uri)
-        return false unless resp.code == "200"
-        File.binwrite(dest, resp.body)
-        true
+                      open_timeout: 15, read_timeout: 300) do |http|
+        req = Net::HTTP::Get.new(uri.request_uri)
+        req['User-Agent'] = "spm/#{SPM_VERSION} Sapphire-Package-Manager"
+        # Stream response directly to disk — avoids loading entire zip into memory
+        http.request(req) do |resp|
+          case resp.code
+          when "200"
+            File.open(dest, 'wb') do |f|
+              resp.read_body { |chunk| f.write(chunk) }
+            end
+            return [true, nil]
+          when "301", "302", "303", "307", "308"
+            new_url = resp['location']
+            return download_file(new_url, dest, redirect_limit - 1)
+          else
+            return [false, "HTTP #{resp.code}"]
+          end
+        end
       end
     rescue => e
-      false
+      [false, e.message]
     end
 
     # ── proxy to sph ──────────────────────────────────────────────────────────

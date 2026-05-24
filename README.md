@@ -4,12 +4,23 @@
 
 **A clean, expressive scripting language built in Ruby.**
 
-![Version](https://img.shields.io/badge/version-0.4.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.1-blue)
 ![Ruby](https://img.shields.io/badge/ruby-3.0%2B-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi-lightgrey)
 
 </div>
+
+> [!IMPORTANT]
+> **Please install v0.5.1 manually.** Versions v0.4.0 and v0.5.0 contain a bug in `spm` that prevents downloading releases correctly. Starting from v0.5.1 this is fixed and future updates will work automatically via `spm self-update`.
+>
+> ```bash
+> git clone https://github.com/GlacEevee/sapphire.git ~/lang/sapphire
+> cd ~/lang/sapphire
+> bash install.sh --user
+> ```
+>
+> If you already have an older version installed, run the above commands to upgrade.
 
 ---
 
@@ -295,6 +306,9 @@ sph init                        # create sapphire.json for a project
 | `io` | read_lines, write_lines, prompt, print_table |
 | `datetime` | Date and time utilities |
 | `test` | Minimalist unit testing framework |
+| `media` | Photo and video viewer — headless Pi friendly (framebuffer, no X needed) |
+| `http` | Simple HTTP client (get/post) |
+| `json` | JSON encode/decode support |
 
 ### `sapphire.json`
 
@@ -319,11 +333,13 @@ Run `sph install` with no arguments to install everything listed.
 `spm` manages the Sapphire interpreter itself.
 
 ```bash
-spm version          # show Sapphire + spm version, note if update available
-spm check-update     # check GitHub for a newer release
-spm self-update      # download and install latest Sapphire from GitHub
-spm status           # full environment report (versions, packages, gems)
-spm changelog        # view the full changelog
+spm version              # show Sapphire + spm version, note if update available
+spm check-update         # check GitHub for a newer release
+spm self-update          # download and install latest Sapphire from GitHub
+spm install 0.5.0        # install a specific Sapphire version
+spm releases             # list all known Sapphire versions
+spm status               # full environment report (versions, packages, gems)
+spm changelog            # view the full changelog
 ```
 
 Package commands also work through `spm` — it forwards them to `sph`:
