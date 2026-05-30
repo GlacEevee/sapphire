@@ -246,6 +246,24 @@ module Sapphire
       when 'lines'        then SapphireArray.new(str.lines.map(&:chomp))
       when 'pad_start'    then NativeFunction.new('pad_start')   { |len, ch = ' '| str.rjust(len, ch) }
       when 'pad_end'      then NativeFunction.new('pad_end')     { |len, ch = ' '| str.ljust(len, ch) }
+      when 'count'        then NativeFunction.new('count')       { |sub| str.scan(Regexp.escape(sub)).length }
+      when 'match?'       then NativeFunction.new('match?')      { |pat| !str.match(Regexp.new(pat)).nil? }
+      when 'scan'         then NativeFunction.new('scan')        { |pat| SapphireArray.new(str.scan(Regexp.new(pat)).flatten) }
+      when 'format'       then NativeFunction.new('format')      { |*args| str.gsub(/%s|%d|%f|%\d*\.?\d*[sdf]/) { |m| args.shift.to_s } }
+      when 'center'       then NativeFunction.new('center')      { |len, ch = ' '| str.center(len, ch) }
+      when 'delete'       then NativeFunction.new('delete')      { |sub| str.gsub(Regexp.escape(sub), '') }
+      when 'squeeze'      then str.squeeze
+      when 'wrap'         then NativeFunction.new('wrap')        { |width = 80|
+        words = str.split(' ')
+        lines, cur = [], ''
+        words.each do |w|
+          if cur.empty? then cur = w
+          elsif (cur + ' ' + w).length <= width then cur += ' ' + w
+          else lines << cur; cur = w end
+        end
+        lines << cur unless cur.empty?
+        lines.join("\n")
+      }
       else raise SapphireError, "String has no method '#{name}'"
       end
     end
@@ -848,6 +866,163 @@ module Sapphire
       @globals.define('zip',    NativeFunction.new('zip')   { |a, b|
         a.elements.zip(b.elements).map { |p| SapphireArray.new(p) }.then { |r| SapphireArray.new(r) }
       })
+
+      # ── Log native ─────────────────────────────────────────────────────────
+      # A simple structured logger available as Log.debug/info/warn/error/fatal
+      # in every Sapphire program without any import.
+      #
+      # Log.level = "warn"        # only warn, error, fatal pass through
+      # Log.output = "/tmp/a.log" # redirect to file (default: stderr)
+      # Log.timestamp = false     # hide timestamps
+      # Log.format = "plain"      # "plain" | "json"
+      log_state = {
+        level:     'debug',   # debug < info < warn < error < fatal
+        output:    nil,       # nil → stderr
+        timestamp: true,
+        format:    'plain',   # "plain" | "json"
+      }
+      log_levels = %w[debug info warn error fatal]
+      log_colors = { 'debug' => "\e[90m", 'info' => "\e[36m", 'warn' => "\e[33m",
+                     'error' => "\e[31m", 'fatal' => "\e[35m" }
+
+      log_write = lambda do |level, msg|
+        threshold = log_levels.index(log_state[:level]) || 0
+        return if log_levels.index(level) < threshold
+
+        ts   = log_state[:timestamp] ? Time.now.strftime('%Y-%m-%dT%H:%M:%S') : nil
+        line = if log_state[:format] == 'json'
+          parts = { level: level.upcase }
+          parts[:time] = ts if ts
+          parts[:msg]  = sapphire_to_s(msg)
+          ::JSON.generate(parts)
+        else
+          color  = log_colors[level] || ''
+          reset  = "\e[0m"
+          label  = "[#{level.upcase}]".ljust(7)
+          prefix = ts ? "#{color}#{ts} #{label}#{reset} " : "#{color}#{label}#{reset} "
+          "#{prefix}#{sapphire_to_s(msg)}"
+        end
+
+        if log_state[:output]
+          File.open(log_state[:output], 'a') { |f| f.puts line } rescue nil
+        else
+          $stderr.puts line
+        end
+        nil
+      end
+
+      @globals.define('Log', SapphireHash.new({
+        'debug' => NativeFunction.new('debug') { |m| log_write.call('debug', m) },
+        'info'  => NativeFunction.new('info')  { |m| log_write.call('info',  m) },
+        'warn'  => NativeFunction.new('warn')  { |m| log_write.call('warn',  m) },
+        'error' => NativeFunction.new('error') { |m| log_write.call('error', m) },
+        'fatal' => NativeFunction.new('fatal') { |m| log_write.call('fatal', m); Kernel.exit(1) },
+        # Config setters
+        'set_level'     => NativeFunction.new('set_level')     { |l| log_state[:level]     = l.to_s.downcase; nil },
+        'set_output'    => NativeFunction.new('set_output')    { |p| log_state[:output]     = p; nil },
+        'set_timestamp' => NativeFunction.new('set_timestamp') { |b| log_state[:timestamp]  = b; nil },
+        'set_format'    => NativeFunction.new('set_format')    { |f| log_state[:format]     = f.to_s.downcase; nil },
+        # Introspection
+        'level'  => NativeFunction.new('level')  { log_state[:level] },
+        'format' => NativeFunction.new('format') { log_state[:format] },
+      }))
+
+      # ── fmt native ─────────────────────────────────────────────────────────
+      # fmt — string formatting and inspection helpers.
+      # Available globally; no import required.
+      #
+      # fmt.sprintf("%s has %d items", name, count)   → formatted string
+      # fmt.pad_left("hi", 10)                        → "        hi"
+      # fmt.pad_right("hi", 10)                       → "hi        "
+      # fmt.center("hi", 10)                          → "    hi    "
+      # fmt.table(rows, headers)                      → ASCII table string
+      # fmt.json(value)                               → pretty JSON
+      # fmt.hex(255)                                  → "ff"
+      # fmt.bin(255)                                  → "11111111"
+      # fmt.comma(1234567)                            → "1,234,567"
+      # fmt.plural(1, "item")                         → "1 item"  /  "2 items"
+      # fmt.duration(90)                              → "1m 30s"
+      # fmt.bytes(1_500_000)                          → "1.43 MB"
+      # fmt.repeat(str, n)                            → str * n
+      # fmt.truncate(str, max, suffix)                → truncated string
+      # fmt.strip_ansi(str)                           → removes ANSI escape codes
+      @globals.define('fmt', SapphireHash.new({
+        'sprintf' => NativeFunction.new('sprintf') { |template, *args|
+          # Supports %s %d %f %05d %.2f etc.
+          i = 0
+          template.to_s.gsub(/%[-+ #0]*\d*\.?\d*[sdfeExXobBgG]/) do |m|
+            val = args[i] || ''
+            i  += 1
+            begin; Kernel.sprintf(m, val); rescue; val.to_s; end
+          end
+        },
+        'pad_left'  => NativeFunction.new('pad_left')  { |s, len, ch = ' '| s.to_s.rjust(len.to_i,  ch.to_s[0] || ' ') },
+        'pad_right' => NativeFunction.new('pad_right') { |s, len, ch = ' '| s.to_s.ljust(len.to_i,  ch.to_s[0] || ' ') },
+        'center'    => NativeFunction.new('center')    { |s, len, ch = ' '| s.to_s.center(len.to_i, ch.to_s[0] || ' ') },
+        'repeat'    => NativeFunction.new('repeat')    { |s, n| s.to_s * n.to_i },
+        'truncate'  => NativeFunction.new('truncate')  { |s, max, suffix = '...'|
+          s = s.to_s; max = max.to_i
+          s.length <= max ? s : s[0, [max - suffix.to_s.length, 0].max] + suffix.to_s
+        },
+        'strip_ansi'=> NativeFunction.new('strip_ansi'){ |s| s.to_s.gsub(/\e\[[0-9;]*[A-Za-z]/, '') },
+        'hex'       => NativeFunction.new('hex')       { |n| n.to_i.to_s(16) },
+        'bin'       => NativeFunction.new('bin')       { |n| n.to_i.to_s(2)  },
+        'oct'       => NativeFunction.new('oct')       { |n| n.to_i.to_s(8)  },
+        'comma'     => NativeFunction.new('comma')     { |n|
+          i, f = n.to_s.split('.')
+          i = i.gsub(/(\d)(?=(\d{3})+(?!\d))/, '\1,')
+          f ? "#{i}.#{f}" : i
+        },
+        'plural'    => NativeFunction.new('plural')    { |n, word, plural_word = nil|
+          plural_word ||= word.to_s + 's'
+          n.to_i == 1 ? "#{n} #{word}" : "#{n} #{plural_word}"
+        },
+        'duration'  => NativeFunction.new('duration')  { |secs|
+          s = secs.to_i.abs
+          d, s = s.divmod(86400)
+          h, s = s.divmod(3600)
+          m, s = s.divmod(60)
+          parts = []
+          parts << "#{d}d" if d > 0
+          parts << "#{h}h" if h > 0
+          parts << "#{m}m" if m > 0
+          parts << "#{s}s" if s > 0 || parts.empty?
+          parts.join(' ')
+        },
+        'bytes'     => NativeFunction.new('bytes')     { |n|
+          n = n.to_f
+          units = %w[B KB MB GB TB PB]
+          i = 0
+          while n >= 1024 && i < units.length - 1
+            n /= 1024.0; i += 1
+          end
+          i == 0 ? "#{n.to_i} B" : "#{'%.2f' % n} #{units[i]}"
+        },
+        'json'      => NativeFunction.new('json')      { |v|
+          require 'json'
+          ::JSON.pretty_generate(sapphire_to_ruby(v)) rescue sapphire_to_s(v)
+        },
+        'table'     => NativeFunction.new('table')     { |rows_val, headers_val = nil|
+          rows = rows_val.is_a?(SapphireArray) ? rows_val.elements.map { |r|
+            r.is_a?(SapphireArray) ? r.elements.map { |c| sapphire_to_s(c) } : [sapphire_to_s(r)]
+          } : []
+          headers = headers_val.is_a?(SapphireArray) ? headers_val.elements.map { |h| sapphire_to_s(h) } : nil
+          all_rows = headers ? [headers] + rows : rows
+          next '' if all_rows.empty?
+          cols = all_rows.map(&:length).max
+          widths = Array.new(cols, 0)
+          all_rows.each { |r| r.each_with_index { |c, i| widths[i] = [widths[i], c.to_s.length].max } }
+          sep  = '+' + widths.map { |w| '-' * (w + 2) }.join('+') + '+'
+          fmt_row = lambda { |r| '|' + r.each_with_index.map { |c, i| " #{c.to_s.ljust(widths[i])} " }.join('|') + '|' }
+          lines = [sep]
+          all_rows.each_with_index do |row, idx|
+            lines << fmt_row.call(row)
+            lines << sep if idx == 0 && headers
+          end
+          lines << sep unless headers
+          lines.join("\n")
+        },
+      }))
 
       # ── JSON native ────────────────────────────────────────────────────────
       require 'json'

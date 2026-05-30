@@ -5,7 +5,48 @@ Format: `## [version] — YYYY-MM-DD`
 
 ---
 
-## [0.5.2] — 2026-05-24
+## [0.5.3] — 2026-05-30
+
+### spm — Automatic interpreter update nudge
+- Sapphire now performs a background update check (at most once per 24 hours) when you run a script
+- If a newer version is available it prints a one-line hint at program exit — startup is never delayed
+- The last-checked timestamp is stored in `~/.sapphire/interpreter_update_stamp`
+- `spm self-update` still performs the actual upgrade
+
+### Built-in `Log` — structured logger (no import needed)
+- `Log.debug(msg)` / `.info()` / `.warn()` / `.error()` / `.fatal()` — levelled output to stderr
+- `Log.set_level("warn")` — filter to warn/error/fatal only
+- `Log.set_output("/var/log/app.log")` — redirect to a file
+- `Log.set_timestamp(false)` — hide timestamps
+- `Log.set_format("json")` — emit newline-delimited JSON instead of plain text
+- `Log.fatal()` logs and then calls `exit(1)`
+
+### Built-in `fmt` — string formatting (no import needed)
+- `fmt.sprintf("%s has %d items", name, n)` — printf-style formatting
+- `fmt.pad_left(s, len, ch)` / `fmt.pad_right` / `fmt.center`
+- `fmt.truncate(s, max, suffix)` — safe truncation
+- `fmt.strip_ansi(s)` — remove ANSI escape codes
+- `fmt.hex(n)` / `fmt.bin(n)` / `fmt.oct(n)` — number base formatting
+- `fmt.comma(n)` — `1234567` → `"1,234,567"`
+- `fmt.plural(n, "item")` — `1 item` / `2 items`
+- `fmt.duration(90)` — `"1m 30s"`
+- `fmt.bytes(1_500_000)` — `"1.43 MB"`
+- `fmt.json(value)` — pretty-printed JSON string
+- `fmt.table(rows, headers)` — ASCII table
+- `fmt.repeat(s, n)` — repeat a string n times
+- `stdlib/fmt.sp` — optional import that exposes everything as top-level functions
+
+### New string methods
+- `s.count(sub)` — count non-overlapping occurrences of a substring
+- `s.match?(pattern)` — regex test
+- `s.scan(pattern)` — return all regex matches as an array
+- `s.format(args...)` — `"%s: %d".format(name, n)`
+- `s.center(len, ch)` — center with padding
+- `s.delete(sub)` — remove all occurrences of a substring
+- `s.squeeze` — collapse consecutive duplicate characters
+- `s.wrap(width)` — word-wrap to a given column width
+
+
 
 ### New Packages (Pure Ruby — works on any OS)
 - `colors` — terminal color/style helpers (`red()`, `bold()`, `underline()`, `success()`, etc.)

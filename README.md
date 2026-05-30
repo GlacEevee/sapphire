@@ -4,7 +4,7 @@
 
 **A clean, expressive scripting language built in Ruby.**
 
-![Version](https://img.shields.io/badge/version-0.5.2-blue)
+![Version](https://img.shields.io/badge/version-0.5.3-blue)
 ![Ruby](https://img.shields.io/badge/ruby-3.0%2B-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Raspberry%20Pi-lightgrey)
@@ -12,15 +12,16 @@
 </div>
 
 > [!IMPORTANT]
-> **Please install v0.5.1 manually.** Versions v0.4.0 and v0.5.0 contain a bug in `spm` that prevents downloading releases correctly. Starting from v0.5.1 this is fixed and future updates will work automatically via `spm self-update`.
+> **Please install v0.5.1 or newer manually.** Versions v0.4.0 and v0.5.0 contain a bug in `spm` that prevents downloading releases correctly. Starting from v0.5.1 this is fixed and future updates work automatically via `spm self-update`.
 >
 > ```bash
 > git clone https://github.com/GlacEevee/sapphire.git ~/lang/sapphire
 > cd ~/lang/sapphire
 > bash install.sh --user
 > ```
->
-> If you already have an older version installed, run the above commands to upgrade.
+
+> [!NOTE]
+> **`spm` is moving to its own branch soon.** Once that happens, Sapphire will check for interpreter updates automatically every 24 hours in the background and notify you — no more manual `git pull` needed. If you're already on v0.5.1+, `spm self-update` will handle the transition for you automatically.
 
 ---
 
@@ -55,8 +56,11 @@ println(greet("Sapphire", greeting: "Welcome to"))
 - `import` / `from X import Y` module system
 - Built-in HTTP client and gateway WebSocket support
 - Discord bot framework via `discordsph`
-- Package manager (`sph`) with versioned installs
+- Package manager (`sph`) with versioned installs and community publishing
 - System manager (`spm`) with GitHub-based auto-update
+- Background update checker — notifies you once per 24h if a newer version is out
+- Built-in `Log` object for structured logging
+- `sapphire fmt` — auto-formatter for `.sp` files
 
 ---
 
@@ -84,6 +88,7 @@ If `~/bin` isn't on your `PATH` yet, the installer will tell you and show you th
 
 - Ruby 3.0 or newer
 - The `websocket-driver` gem (installed automatically by the installer)
+- Node.js *(optional — only needed for `web`, `ui`, `canvas` packages)*
 
 ### Verify
 
@@ -106,6 +111,10 @@ sapphire repl
 
 # Syntax check without running
 sapphire check myfile.sp
+
+# Auto-format a file
+sapphire fmt myfile.sp
+sapphire fmt --check myfile.sp   # check only, exit 1 if unformatted
 ```
 
 ---
@@ -175,7 +184,6 @@ let label = x > 50 ? "large" : "small"
 
 # While
 while condition {
-  # ...
   break
   next
 }
@@ -195,12 +203,6 @@ match day {
   "Monday"   => println("Back to work...")
   _          => println(`${day} is a weekday`)
 }
-
-match true {
-  score >= 90 => println("A")
-  score >= 80 => println("B")
-  _           => println("C or below")
-}
 ```
 
 ### Arrays
@@ -208,22 +210,13 @@ match true {
 ```sp
 let nums = [10, 3, 7, 1, 9]
 
-nums.map({ |n| n * 2 })         # double each
-nums.filter({ |n| n % 2 == 0 }) # keep evens
-nums.reduce({ |acc, n| acc + n }, 0) # sum
-nums.sort                        # sorted copy
-nums.find({ |n| n > 7 })        # first match
-nums.all?({ |n| n > 0 })        # predicate
-nums.each({ |n| println(n) })   # iterate
-```
-
-### Hashes
-
-```sp
-let user = { name: "Bob", age: 25 }
-println(user["name"])
-user["job"] = "Developer"
-println(user.keys)
+nums.map({ |n| n * 2 })
+nums.filter({ |n| n % 2 == 0 })
+nums.reduce({ |acc, n| acc + n }, 0)
+nums.sort
+nums.find({ |n| n > 7 })
+nums.all?({ |n| n > 0 })
+nums.each({ |n| println(n) })
 ```
 
 ### Classes
@@ -270,13 +263,27 @@ try {
 }
 ```
 
+### Logging
+
+```sp
+# Built-in — no import needed
+Log.info("Server started")
+Log.warn("Low memory")
+Log.error("Connection failed")
+Log.debug("x = " + str(x))
+
+Log.level = "warn"           # hide debug and info
+Log.output = "app.log"       # write to file
+Log.format = "json"          # structured JSON output
+```
+
 ### Modules
 
 ```sp
 import math
 from strings import capitalize, truncate
 
-println(math.fibonacci(10))
+println(fibonacci(10))
 println(capitalize("hello world"))
 ```
 
@@ -288,11 +295,27 @@ println(capitalize("hello world"))
 sph install discordsph          # install latest
 sph install discordsph 1.2.0    # install specific version
 sph list                        # show installed packages
-sph search discord              # search registry
+sph search discord              # search registry + community packages
 sph info discordsph             # package details
 sph remove discordsph           # uninstall
 sph init                        # create sapphire.json for a project
+sph publish                     # publish your package to GitHub
 ```
+
+### Installing community packages
+
+```bash
+sph install foxie/colors        # install from a user's packages branch
+```
+
+### Publishing your own package
+
+```bash
+cd mypackage/
+sph publish    # first time: prompts for GitHub token, then auto-publishes
+```
+
+Others install it with `sph install yourname/packagename`. See [COMMUNITY_PACKAGES.md](COMMUNITY_PACKAGES.md) for the full guide.
 
 ### Available packages
 
@@ -307,8 +330,16 @@ sph init                        # create sapphire.json for a project
 | `datetime` | Date and time utilities |
 | `test` | Minimalist unit testing framework |
 | `media` | Photo and video viewer — headless Pi friendly (framebuffer, no X needed) |
-| `http` | Simple HTTP client (get/post) |
-| `json` | JSON encode/decode support |
+| `colors` | Terminal color helpers — `red()`, `bold()`, `success()`, etc. |
+| `args` | CLI argument parser — `--flags`, `--option value`, positional args |
+| `yml` | YAML file read/write |
+| `csv` | CSV file read/write |
+| `crypto` | SHA256, MD5, base64, HMAC, UUID |
+| `files` | File/directory utilities, glob, file watcher |
+| `zip` | Create and extract zip archives |
+| `env` | OS/platform detection, environment variables |
+| `sqlite` | Embedded SQLite database *(requires `gem install sqlite3`)* |
+| `web` | Web server with routing and WebSockets *(requires Node.js)* |
 
 ### `sapphire.json`
 
@@ -330,17 +361,19 @@ Run `sph install` with no arguments to install everything listed.
 
 ## System Manager — `spm`
 
-`spm` manages the Sapphire interpreter itself.
+`spm` manages the Sapphire interpreter itself. Starting from v0.5.3, Sapphire checks for interpreter updates automatically in the background every 24 hours and shows a notice at the end of your script if a newer version is available — no manual checking needed.
 
 ```bash
-spm version              # show Sapphire + spm version, note if update available
-spm check-update         # check GitHub for a newer release
-spm self-update          # download and install latest Sapphire from GitHub
+spm version              # show Sapphire + spm version
+spm check-update         # manually check for a newer release
+spm self-update          # download and install latest Sapphire
 spm install 0.5.0        # install a specific Sapphire version
 spm releases             # list all known Sapphire versions
-spm status               # full environment report (versions, packages, gems)
+spm status               # full environment report
 spm changelog            # view the full changelog
 ```
+
+> **Coming soon:** `spm` is moving to its own dedicated branch. Once live, interpreter updates will be delivered directly through `spm` without needing to touch the main repo — fully automatic, fully seamless.
 
 Package commands also work through `spm` — it forwards them to `sph`:
 
@@ -363,22 +396,8 @@ commands.register("ping", fn(msg, args) {
   msg.reply("Pong! 🏓")
 })
 
-commands.register_with_cooldown("daily", 86400, fn(msg, args) {
-  msg.reply("Here's your daily reward!")
-})
-
-commands.use(fn(msg, cmd_name, args) {
-  # Middleware — return false to block a command
-  if msg.is_bot() { return false }
-  return true
-})
-
 client.on_ready(fn(data) {
   println("Logged in as: " + data["user"]["username"])
-})
-
-client.on_reaction_add(fn(data) {
-  println("Reaction added: " + data["emoji"]["name"])
 })
 
 client.login()
@@ -396,48 +415,53 @@ sapphire/
 ├── lexer.rb             # Tokeniser
 ├── parser.rb            # AST parser
 ├── interpreter.rb       # Tree-walking interpreter
+├── formatter.rb         # Source code formatter (sapphire fmt)
 ├── ast.rb               # AST node definitions
 ├── types.rb             # Sapphire type system
 ├── environment.rb       # Variable scope/environment
 ├── sph.rb               # Package manager
 ├── spm.rb               # System manager
 ├── install.sh           # Installer script
-├── SAPPHIRE_VERSION     # Current version (single source of truth)
+├── SAPPHIRE_VERSION     # Current version
 ├── CHANGELOG.md         # Full version history
+├── COMMUNITY_PACKAGES.md# Guide for publishing packages
+├── js_bridge/           # Optional Node.js bridge
+│   ├── bridge.rb
+│   ├── runtime.js
+│   └── packages/
 ├── releases/
-│   └── latest.json      # Release manifest (fetched by spm)
+│   ├── latest.json      # Release manifest (fetched by spm)
+│   ├── v0.5.3.json
+│   └── ...
 ├── stdlib/              # Standard library (.sp files)
 │   ├── discordsph.sp
 │   ├── math.sp
 │   ├── strings.sp
 │   └── ...
-├── examples/            # Example programs
+├── examples/
 │   ├── fizzbuzz.sp
 │   ├── showcase.sp
 │   └── discord_bot.sp
 └── bin/
-    ├── sapphire         # Wrapper
-    ├── sph              # Wrapper
-    └── spm              # Wrapper
-```
-
----
-
-## Examples
-
-```bash
-sapphire examples/fizzbuzz.sp
-sapphire examples/showcase.sp
-sapphire examples/discord_bot.sp
+    ├── sapphire
+    ├── sph
+    └── spm
 ```
 
 ---
 
 ## Updating Sapphire
 
+Sapphire will tell you automatically at the end of a script run if a newer version is available. To update:
+
 ```bash
-spm check-update   # see if a new version is out
-spm self-update    # install it
+spm self-update
+```
+
+Or install a specific version:
+
+```bash
+spm install 0.5.2
 ```
 
 ---

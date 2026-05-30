@@ -47,8 +47,52 @@ module Sapphire
       exit 1
     end
     source = File.read(path)
+    check_interpreter_update   # non-blocking background check
     check_package_upgrades(source)
     run_source(source, path)
+  end
+
+  # ── Background interpreter update nudge ───────────────────────────────────
+  # Checks at most once per INTERPRETER_UPDATE_TTL seconds (default 24 h).
+  # Runs in a thread so it never delays startup; prints a one-line hint at exit.
+  INTERPRETER_UPDATE_TTL = 86_400   # seconds
+
+  def self.check_interpreter_update
+    stamp_file = File.expand_path('~/.sapphire/interpreter_update_stamp')
+    # Throttle: skip if checked recently
+    if File.exist?(stamp_file)
+      last = File.read(stamp_file).strip.to_i
+      return if (Time.now.to_i - last) < INTERPRETER_UPDATE_TTL
+    end
+
+    # Spin up a background thread so startup is never delayed
+    Thread.new do
+      begin
+        require_relative 'spm'
+        # Refresh the manifest (uses its own cache layer on top of our stamp)
+        manifest = Sapphire::Manager.fetch_manifest(force: false)
+        File.write(stamp_file, Time.now.to_i.to_s) rescue nil
+
+        next unless manifest
+        remote   = manifest['version']
+        current  = VERSION
+        next unless remote
+
+        require 'rubygems'
+        if Gem::Version.new(remote) > Gem::Version.new(current)
+          at_exit do
+            puts ""
+            puts "\e[33m  ⬆  Sapphire v#{remote} is available  (you have v#{current})\e[0m"
+            puts "\e[36m     Run: spm self-update\e[0m"
+            puts ""
+          end
+        end
+      rescue
+        # silently ignore — network down, spm missing, anything
+      end
+    end
+  rescue
+    # Thread creation failed — skip silently
   end
 
   # Scan the source for `import <pkg>` lines and warn if a newer version exists.
@@ -177,8 +221,19 @@ when 'check'
     $stderr.puts "Usage: sapphire check <file.sp>"
     exit 1
   end
+when 'fmt', 'format'
+  check_mode = ARGV[1] == '--check'
+  file_arg   = check_mode ? ARGV[2] : ARGV[1]
+  if file_arg
+    require_relative 'formatter'
+    Sapphire.fmt_file(file_arg, check: check_mode)
+  else
+    $stderr.puts "Usage: sapphire fmt <file.sp>"
+    $stderr.puts "       sapphire fmt --check <file.sp>"
+    exit 1
+  end
 when 'version', '--version', '-v'
-  puts "Sapphire #{Sapphire::VERSION}"
+  puts "Sapphire \#{Sapphire::VERSION}"
 when 'help', '--help', '-h'
   puts "\e[34m╔══════════════════════════════════════════╗"
   puts "║   Sapphire v#{Sapphire::VERSION} — Programming Language  ║"
@@ -189,6 +244,8 @@ when 'help', '--help', '-h'
   puts "  \e[36msapphire run <file.sp>\e[0m          Run a .sp file"
   puts "  \e[36msapphire repl\e[0m                   Start interactive REPL"
   puts "  \e[36msapphire check <file.sp>\e[0m        Check syntax without running"
+  puts "  \e[36msapphire fmt <file.sp>\e[0m          Auto-format a .sp file"
+  puts "  \e[36msapphire fmt --check <file.sp>\e[0m  Check formatting without writing"
   puts "  \e[36msapphire version\e[0m                Show version"
   puts ""
   puts "Package Manager:"

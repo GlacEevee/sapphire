@@ -1,0 +1,8 @@
+{
+  "version": "0.5.3",
+  "released": "2026-05-30",
+  "notes": "sapphire fmt, built-in Log, better string methods, background update checker",
+  "download": "https://github.com/GlacEevee/sapphire/releases/download/v0.5.3/sapphire0_5_3.zip",
+  "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
+  "min_ruby": "3.0.0"
+}
