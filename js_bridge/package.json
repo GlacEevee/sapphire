@@ -1,0 +1,13 @@
+{
+  "name": "sapphire-js-bridge",
+  "version": "1.0.0",
+  "description": "Node.js bridge for Sapphire language JS packages",
+  "main": "runtime.js",
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.0.0"
+  },
+  "optionalDependencies": {
+    "@neutralinojs/lib": "^5.0.0"
+  }
+}

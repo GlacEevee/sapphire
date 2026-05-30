@@ -610,6 +610,28 @@ module Sapphire
 
     # ─── Imports ──────────────────────────────────────────────────────────────
 
+
+    # Decrypt an encrypted .spe package file
+    def decrypt_package(enc_path)
+      require 'openssl'
+      key_file = File.join(Dir.home, '.sapphire', 'pkg.key')
+      return nil unless File.exist?(key_file)
+      key      = [File.read(key_file).strip].pack('H*')
+      payload  = File.binread(enc_path)
+      iv         = payload[0, 12]
+      tag        = payload[12, 16]
+      ciphertext = payload[28..]
+      cipher     = OpenSSL::Cipher.new('AES-256-GCM')
+      cipher.decrypt
+      cipher.key       = key
+      cipher.iv        = iv
+      cipher.auth_tag  = tag
+      cipher.auth_data = ""
+      cipher.update(ciphertext) + cipher.final
+    rescue => e
+      nil
+    end
+
     def eval_import(node, env)
       mod = load_module(node.path, env)
       if node.names
@@ -653,13 +675,28 @@ module Sapphire
         ]
       end
 
-      found_path = search_paths.find { |p| File.exist?(p) }
+      # Also check for encrypted .spe versions in packages dir
+      enc_search = search_paths.map { |p| p.sub(/\.sp$/, '.spe') }
+      found_path  = search_paths.find { |p| File.exist?(p) }
+      found_enc   = enc_search.find   { |p| File.exist?(p) } unless found_path
 
       if found_path
         mod_env = Environment.new(@globals)
-        src    = File.read(found_path)
-        tokens = Lexer.new(src, found_path).tokenize
-        ast    = Parser.new(tokens, found_path).parse
+        src     = File.read(found_path)
+        tokens  = Lexer.new(src, found_path).tokenize
+        ast     = Parser.new(tokens, found_path).parse
+        eval_program(ast, mod_env)
+        @modules[name] = mod_env.store
+      elsif found_enc
+        # Decrypt the package before loading
+        src = decrypt_package(found_enc)
+        if src.nil?
+          raise SapphireError,
+            "Package '#{name}' is encrypted and could not be decrypted.\n"             "The package may be corrupted. Try reinstalling:\n  sph install #{name}"
+        end
+        mod_env = Environment.new(@globals)
+        tokens  = Lexer.new(src, found_enc).tokenize
+        ast     = Parser.new(tokens, found_enc).parse
         eval_program(ast, mod_env)
         @modules[name] = mod_env.store
       else
@@ -995,6 +1032,339 @@ module Sapphire
         },
         'send_payload' => NativeFunction.new('send_payload') { |token, payload| nil },
       }))
+
+      require 'digest'
+      require 'base64'
+      require 'securerandom'
+      require 'fileutils'
+      require 'find'
+      require 'yaml'
+      require 'csv'
+      require 'rbconfig'
+      require 'socket'
+      require 'tmpdir'
+      require 'openssl'
+
+      # ── Args native ───────────────────────────────────────────────────────────
+      @globals.define('Args', SapphireHash.new({
+        'parse' => NativeFunction.new('parse') {
+          argv = (defined?(ARGV) ? ARGV : []).dup
+          parsed = { 'flags' => [], 'options' => {}, 'positional' => [] }
+          i = 0
+          while i < argv.length
+            a = argv[i]
+            if a.start_with?('--')
+              key = a[2..]
+              if i + 1 < argv.length && !argv[i+1].start_with?('-')
+                parsed['options'][key] = argv[i+1]; i += 2
+              else
+                parsed['flags'] << key; i += 1
+              end
+            elsif a.start_with?('-')
+              parsed['flags'] << a[1..]; i += 1
+            else
+              parsed['positional'] << a; i += 1
+            end
+          end
+          ruby_to_sapphire(parsed)
+        },
+        'get' => NativeFunction.new('get') { |name|
+          argv = defined?(ARGV) ? ARGV.dup : []
+          idx  = argv.index("--#{name}")
+          (idx && idx + 1 < argv.length) ? argv[idx + 1] : nil
+        },
+        'flag' => NativeFunction.new('flag') { |name|
+          argv = defined?(ARGV) ? ARGV.dup : []
+          argv.include?("--#{name}") || argv.include?("-#{name}")
+        },
+        'positional' => NativeFunction.new('positional') {
+          argv = defined?(ARGV) ? ARGV.dup : []
+          ruby_to_sapphire(argv.reject { |a| a.start_with?('-') })
+        },
+      }))
+
+      # ── Yml native ────────────────────────────────────────────────────────────
+      @globals.define('Yml', SapphireHash.new({
+        'load' => NativeFunction.new('load') { |path|
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Yml.load: file not found: #{path}"; next nil
+          end
+          ruby_to_sapphire(YAML.safe_load(File.read(path), permitted_classes: [Symbol]) || {})
+        },
+        'load_str' => NativeFunction.new('load_str') { |text|
+          ruby_to_sapphire(YAML.safe_load(text, permitted_classes: [Symbol]) || {})
+        },
+        'dump' => NativeFunction.new('dump') { |data|
+          YAML.dump(sapphire_to_ruby(data))
+        },
+        'save' => NativeFunction.new('save') { |path, data|
+          path = File.expand_path(path)
+          File.write(path, YAML.dump(sapphire_to_ruby(data)))
+          true
+        },
+      }))
+
+      # ── Csv native ────────────────────────────────────────────────────────────
+      @globals.define('Csv', SapphireHash.new({
+        'read' => NativeFunction.new('read') { |path|
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Csv.read: file not found: #{path}"; next ruby_to_sapphire([])
+          end
+          rows = CSV.read(path)
+          ruby_to_sapphire(rows)
+        },
+        'read_headers' => NativeFunction.new('read_headers') { |path|
+          path = File.expand_path(path)
+          unless File.exist?(path)
+            puts "Csv.read_headers: file not found: #{path}"; next ruby_to_sapphire([])
+          end
+          rows = CSV.read(path, headers: true).map(&:to_h)
+          ruby_to_sapphire(rows)
+        },
+        'write' => NativeFunction.new('write') { |path, rows|
+          path = File.expand_path(path)
+          CSV.open(path, 'w') do |csv|
+            sapphire_to_ruby(rows).each { |row| csv << row }
+          end
+          true
+        },
+        'write_headers' => NativeFunction.new('write_headers') { |path, headers, rows|
+          path = File.expand_path(path)
+          CSV.open(path, 'w') do |csv|
+            csv << sapphire_to_ruby(headers)
+            sapphire_to_ruby(rows).each { |row| csv << row }
+          end
+          true
+        },
+        'parse' => NativeFunction.new('parse') { |text|
+          ruby_to_sapphire(CSV.parse(text))
+        },
+        'stringify' => NativeFunction.new('stringify') { |rows|
+          CSV.generate { |csv| sapphire_to_ruby(rows).each { |r| csv << r } }
+        },
+      }))
+
+      # ── Crypto native ─────────────────────────────────────────────────────────
+      @globals.define('Crypto', SapphireHash.new({
+        'sha256'  => NativeFunction.new('sha256')  { |data| Digest::SHA256.hexdigest(data.to_s) },
+        'sha512'  => NativeFunction.new('sha512')  { |data| Digest::SHA512.hexdigest(data.to_s) },
+        'md5'     => NativeFunction.new('md5')     { |data| Digest::MD5.hexdigest(data.to_s) },
+        'sha1'    => NativeFunction.new('sha1')    { |data| Digest::SHA1.hexdigest(data.to_s) },
+        'base64_encode' => NativeFunction.new('base64_encode') { |data| Base64.strict_encode64(data.to_s) },
+        'base64_decode' => NativeFunction.new('base64_decode') { |data| Base64.decode64(data.to_s) },
+        'hex_encode'    => NativeFunction.new('hex_encode')    { |data| data.to_s.unpack1('H*') },
+        'hex_decode'    => NativeFunction.new('hex_decode')    { |data| [data.to_s].pack('H*') },
+        'hmac_sha256'   => NativeFunction.new('hmac_sha256')   { |key, data|
+          OpenSSL::HMAC.hexdigest('SHA256', key.to_s, data.to_s)
+        },
+        'random_bytes' => NativeFunction.new('random_bytes') { |n| SecureRandom.bytes(n.to_i) },
+        'random_hex'   => NativeFunction.new('random_hex')   { |n| SecureRandom.hex(n.to_i) },
+        'uuid'         => NativeFunction.new('uuid')         { SecureRandom.uuid },
+      }))
+
+      # ── Files native ──────────────────────────────────────────────────────────
+      @globals.define('Files', SapphireHash.new({
+        'read'    => NativeFunction.new('read')    { |path| File.read(File.expand_path(path)) rescue nil },
+        'write'   => NativeFunction.new('write')   { |path, data| File.write(File.expand_path(path), data.to_s); true },
+        'append'  => NativeFunction.new('append')  { |path, data| File.open(File.expand_path(path), 'a') { |f| f.write(data.to_s) }; true },
+        'delete'  => NativeFunction.new('delete')  { |path| File.delete(File.expand_path(path)) rescue false; true },
+        'exists'  => NativeFunction.new('exists')  { |path| File.exist?(File.expand_path(path)) },
+        'copy'    => NativeFunction.new('copy')    { |src, dst| FileUtils.cp(File.expand_path(src), File.expand_path(dst)); true },
+        'move'    => NativeFunction.new('move')    { |src, dst| FileUtils.mv(File.expand_path(src), File.expand_path(dst)); true },
+        'mkdir'   => NativeFunction.new('mkdir')   { |path| FileUtils.mkdir_p(File.expand_path(path)); true },
+        'rmdir'   => NativeFunction.new('rmdir')   { |path| FileUtils.rm_rf(File.expand_path(path)); true },
+        'ls'      => NativeFunction.new('ls')      { |path|
+          ruby_to_sapphire(Dir.entries(File.expand_path(path)).reject { |e| e == '.' || e == '..' })
+        },
+        'ls_r'    => NativeFunction.new('ls_r')    { |path|
+          results = []
+          Find.find(File.expand_path(path)) { |p| results << p }
+          ruby_to_sapphire(results)
+        },
+        'glob'    => NativeFunction.new('glob')    { |pat| ruby_to_sapphire(Dir.glob(pat)) },
+        'basename'=> NativeFunction.new('basename'){ |path| File.basename(path.to_s) },
+        'dirname' => NativeFunction.new('dirname') { |path| File.dirname(path.to_s) },
+        'extname' => NativeFunction.new('extname') { |path| File.extname(path.to_s) },
+        'join'    => NativeFunction.new('join')    { |a, b| File.join(a.to_s, b.to_s) },
+        'expand'  => NativeFunction.new('expand')  { |path| File.expand_path(path.to_s) },
+        'size'    => NativeFunction.new('size')    { |path| File.size(File.expand_path(path.to_s)) rescue 0 },
+        'is_dir'  => NativeFunction.new('is_dir')  { |path| File.directory?(File.expand_path(path.to_s)) },
+        'is_file' => NativeFunction.new('is_file') { |path| File.file?(File.expand_path(path.to_s)) },
+        'watch'   => NativeFunction.new('watch')   { |path, callback|
+          Thread.new do
+            last_mtime = File.mtime(File.expand_path(path.to_s)) rescue nil
+            loop do
+              sleep 1
+              mtime = File.mtime(File.expand_path(path.to_s)) rescue nil
+              if mtime && mtime != last_mtime
+                last_mtime = mtime
+                callback.call(path)
+              end
+            end
+          end
+          true
+        },
+      }))
+
+      # ── Zip native ────────────────────────────────────────────────────────────
+      @globals.define('Zip', SapphireHash.new({
+        'create' => NativeFunction.new('create') { |zip_path, files|
+          require 'shellwords'
+          zip_path = File.expand_path(zip_path)
+          file_args = sapphire_to_ruby(files).map { |f| File.expand_path(f).shellescape }.join(' ')
+          system("zip -r #{zip_path.shellescape} #{file_args} > /dev/null 2>&1")
+        },
+        'extract' => NativeFunction.new('extract') { |zip_path, dest|
+          require 'shellwords'
+          zip_path = File.expand_path(zip_path)
+          dest     = File.expand_path(dest)
+          FileUtils.mkdir_p(dest)
+          system("unzip -q #{zip_path.shellescape} -d #{dest.shellescape}")
+        },
+        'list' => NativeFunction.new('list') { |zip_path|
+          require 'shellwords'
+          zip_path = File.expand_path(zip_path)
+          out = `unzip -l #{zip_path.shellescape} 2>/dev/null`
+          lines = out.lines[3..-3] || []
+          ruby_to_sapphire(lines.map { |l| l.strip.split(/\s+/, 4).last }.compact)
+        },
+        'contains' => NativeFunction.new('contains') { |zip_path, file|
+          require 'shellwords'
+          zip_path = File.expand_path(zip_path)
+          system("unzip -l #{zip_path.shellescape} | grep -q #{file.shellescape}")
+        },
+      }))
+
+      # ── Env native ────────────────────────────────────────────────────────────
+      @globals.define('Env', SapphireHash.new({
+        'os' => NativeFunction.new('os') {
+          case RbConfig::CONFIG['host_os']
+          when /mswin|mingw|cygwin/ then 'windows'
+          when /darwin/             then 'macos'
+          when /linux/              then 'linux'
+          else                           RbConfig::CONFIG['host_os']
+          end
+        },
+        'arch'     => NativeFunction.new('arch')     { RbConfig::CONFIG['host_cpu'] },
+        'home'     => NativeFunction.new('home')     { Dir.home },
+        'user'     => NativeFunction.new('user')     { ENV['USER'] || ENV['USERNAME'] || 'unknown' },
+        'hostname' => NativeFunction.new('hostname') { Socket.gethostname rescue 'unknown' },
+        'cwd'      => NativeFunction.new('cwd')      { Dir.pwd },
+        'tmp'      => NativeFunction.new('tmp')      { Dir.tmpdir },
+        'get'      => NativeFunction.new('get')      { |key| ENV[key.to_s] },
+        'set'      => NativeFunction.new('set')      { |key, val| ENV[key.to_s] = val.to_s; true },
+        'has'      => NativeFunction.new('has')      { |key| ENV.key?(key.to_s) },
+        'all'      => NativeFunction.new('all')      { ruby_to_sapphire(ENV.to_h) },
+        'ruby_version' => NativeFunction.new('ruby_version') { RUBY_VERSION },
+        'node_version' => NativeFunction.new('node_version') {
+          out = `node --version 2>/dev/null`.strip
+          out.empty? ? nil : out.sub('v','')
+        },
+        'has_node' => NativeFunction.new('has_node') {
+          system("which node > /dev/null 2>&1") || system("where node > nul 2>&1")
+        },
+        'is_pi'    => NativeFunction.new('is_pi') {
+          File.exist?('/sys/firmware/devicetree/base/model') &&
+          File.read('/sys/firmware/devicetree/base/model').include?('Raspberry Pi') rescue false
+        },
+      }))
+
+      # ── Sqlite native ─────────────────────────────────────────────────────────
+      begin
+        require 'sqlite3'
+        @globals.define('Sqlite', SapphireHash.new({
+          'open' => NativeFunction.new('open') { |path|
+            path == ':memory:' ? SQLite3::Database.new(':memory:') : SQLite3::Database.new(File.expand_path(path))
+          },
+          'query' => NativeFunction.new('query') { |db, sql|
+            rows = db.execute(sql)
+            ruby_to_sapphire(rows)
+          },
+          'query_one' => NativeFunction.new('query_one') { |db, sql|
+            row = db.get_first_row(sql)
+            ruby_to_sapphire(row || [])
+          },
+          'execute' => NativeFunction.new('execute') { |db, sql|
+            db.execute(sql); true
+          },
+          'execute_params' => NativeFunction.new('execute_params') { |db, sql, params|
+            db.execute(sql, sapphire_to_ruby(params)); true
+          },
+          'close' => NativeFunction.new('close') { |db| db.close; true },
+          'tables' => NativeFunction.new('tables') { |db|
+            rows = db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            ruby_to_sapphire(rows.map(&:first))
+          },
+          'create_table' => NativeFunction.new('create_table') { |db, name, cols|
+            col_defs = sapphire_to_ruby(cols).map { |k, v| "#{k} #{v}" }.join(', ')
+            db.execute("CREATE TABLE IF NOT EXISTS #{name} (#{col_defs})")
+            true
+          },
+          'insert' => NativeFunction.new('insert') { |db, table, data|
+            h = sapphire_to_ruby(data)
+            cols = h.keys.join(', ')
+            vals = (['?'] * h.size).join(', ')
+            db.execute("INSERT INTO #{table} (#{cols}) VALUES (#{vals})", h.values)
+            true
+          },
+          'select_all' => NativeFunction.new('select_all') { |db, table|
+            db.results_as_hash = true
+            rows = db.execute("SELECT * FROM #{table}")
+            db.results_as_hash = false
+            ruby_to_sapphire(rows)
+          },
+          'select_where' => NativeFunction.new('select_where') { |db, table, col, val|
+            db.results_as_hash = true
+            rows = db.execute("SELECT * FROM #{table} WHERE #{col} = ?", [val])
+            db.results_as_hash = false
+            ruby_to_sapphire(rows)
+          },
+          'update' => NativeFunction.new('update') { |db, table, data, where_col, where_val|
+            h    = sapphire_to_ruby(data)
+            sets = h.keys.map { |k| "#{k} = ?" }.join(', ')
+            db.execute("UPDATE #{table} SET #{sets} WHERE #{where_col} = ?", h.values + [where_val])
+            true
+          },
+          'delete_where' => NativeFunction.new('delete_where') { |db, table, col, val|
+            db.execute("DELETE FROM #{table} WHERE #{col} = ?", [val])
+            true
+          },
+        }))
+      rescue LoadError
+        # sqlite3 gem not installed — define a stub that tells the user what to do
+        @globals.define('Sqlite', SapphireHash.new({
+          'open' => NativeFunction.new('open') { |_|
+            puts "[Sapphire] sqlite3 gem not installed."
+            puts "  Install it with: gem install sqlite3"
+            nil
+          },
+        }))
+      end
+
+
+
+      # ── JS Bridge native (Web, UI, Canvas — requires Node.js) ────────────────
+      begin
+        require_relative 'js_bridge/bridge'
+        js_packages = ['web', 'ui', 'canvas']
+        js_packages.each do |pkg|
+          pkg_const = pkg.capitalize
+          @globals.define(pkg_const, SapphireHash.new({
+            '__js_package__' => pkg,
+          }.merge(
+            %w[create get post listen stop serve_static open draw].map { |fn|
+              [fn, NativeFunction.new(fn) { |*args|
+                Sapphire::JSBridge.call(pkg, fn, args)
+              }]
+            }.to_h
+          )))
+        end
+      rescue LoadError
+        # js_bridge not available — stubs defined when packages are imported
+      end
+
       require 'shellwords'
       # ── Media native (images + video, headless Pi friendly) ───────────────────
       @globals.define('Media', SapphireHash.new({

@@ -2,35 +2,28 @@
 import media
 
 # Check what's available
-media.status()
+status()
 println("")
 
-# View a single image
-# media.view("/home/foxie/Pictures/photo.jpg")
+# First time setup — installs fim, mpv, jp2a via apt
+# setup()
 
-# View as ASCII art (works over plain SSH, no framebuffer needed)
-# media.view_ascii("/home/foxie/Pictures/photo.jpg")
+# View an image (framebuffer, no X needed)
+view("photo.png")
+
+# View as ASCII art — works over plain SSH
+# view_ascii("photo.png")
 
 # Play a video
-# media.play("/home/foxie/Videos/clip.mp4")
+# play("video.mp4")
 
 # Slideshow
-# let photos = [
-#   "/home/foxie/Pictures/1.jpg",
-#   "/home/foxie/Pictures/2.jpg",
-#   "/home/foxie/Pictures/3.jpg"
-# ]
-# media.slideshow(photos, 4)
+# slideshow(["photo1.jpg", "photo2.jpg"], 4)
 
 # Get image info
-# let info = media.image_info("/home/foxie/Pictures/photo.jpg")
-# println("Width:  " + str(info["width"]))
-# println("Height: " + str(info["height"]))
+# let info = image_info("photo.png")
+# println("Width: " + str(info["width"]))
 
 # Get video info
-# let info = media.video_info("/home/foxie/Videos/clip.mp4")
+# let info = video_info("clip.mp4")
 # println("Duration: " + str(info["duration"]) + "s")
-# println("Format:   " + info["format"])
-
-# First time? Install everything:
-# media.setup()

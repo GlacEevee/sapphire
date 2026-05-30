@@ -1,0 +1,8 @@
+{
+  "version": "0.5.2",
+  "released": "2026-05-24",
+  "notes": "New stdlib: sqlite, yml, csv, crypto, files, zip, env, colors, args, web. JS bridge. sph publish. Package encryption.",
+  "download": "https://github.com/GlacEevee/sapphire/releases/download/v0.5.2/sapphire0_5_2.zip",
+  "install_script": "https://raw.githubusercontent.com/GlacEevee/sapphire/main/install.sh",
+  "min_ruby": "3.0.0"
+}

@@ -5,6 +5,43 @@ Format: `## [version] — YYYY-MM-DD`
 
 ---
 
+## [0.5.2] — 2026-05-24
+
+### New Packages (Pure Ruby — works on any OS)
+- `colors` — terminal color/style helpers (`red()`, `bold()`, `underline()`, `success()`, etc.)
+- `args` — CLI argument parser (`--flags`, `--option value`, positional args)
+- `yml` — YAML file read/write
+- `csv` — CSV file read/write
+- `crypto` — SHA256, MD5, SHA512, base64, HMAC, UUID generation
+- `files` — file/directory utilities, glob, file watcher
+- `zip` — create/extract zip archives
+- `env` — OS/platform detection, environment variables, Raspberry Pi detection
+- `sqlite` — embedded SQLite database (requires `gem install sqlite3`)
+- `web` — web server with routing and WebSockets (**requires Node.js**)
+
+### JavaScript Bridge
+- New `js_bridge/` folder — Ruby↔Node.js bridge for packages Ruby can't do well
+- `bridge.rb` — spawns Node.js process, communicates over JSON stdio
+- `runtime.js` — Node.js side receives calls and dispatches to JS packages
+- Post-install reminder when installing Node.js-backed packages
+- Clear message with install instructions when Node.js is not found
+
+### sph publish
+- `sph publish` — publish your package to your GitHub fork's `packages` branch
+- First-time CLI registration — saves token to `~/.sapphire/auth.json` (chmod 600)
+- Auto-forks `GlacEevee/sapphire` if needed
+- Creates `packages` branch automatically
+- Updates `packages/registry.json` on your fork
+- Others install with: `sph install username/packagename`
+
+### Package Encryption
+- Community and fork packages are encrypted with AES-256-GCM on install
+- Key stored in `~/.sapphire/pkg.key` (owner read-only)
+- Interpreter decrypts at load time — transparent to users
+- Tampered packages fail checksum and won't load
+
+---
+
 ## [0.5.1] — 2026-05-19
 
 ### New Features
