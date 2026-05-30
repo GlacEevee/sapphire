@@ -4,32 +4,44 @@ Anyone can publish a Sapphire package and make it installable via `sph install`.
 
 ---
 
-## Quick Start
+## How it works
 
-1. Create a public GitHub repository (e.g. `your-username/sph-mypackage`)
-2. Add a `sapphire.json` manifest to the root
-3. Add your `.sp` source file(s)
-4. Tag your repository with the topic **`sapphire-package`** on GitHub
-5. Done — it will appear in `sph search`
+When you run `sph publish`, it:
+
+1. Asks for your GitHub credentials the first time (saved to `~/.sapphire/auth.json`)
+2. Forks `GlacEevee/sapphire` into your GitHub account (if not already forked)
+3. Creates a `packages` branch on your fork
+4. Uploads your `.sp` file to `packages/yourpackage.sp`
+5. Updates `packages/registry.json` on your fork
+
+Others install your package with:
+```bash
+sph install yourname/packagename
+```
 
 ---
 
-## Repository Structure
+## Quick Start
 
+```bash
+# 1. Create a folder for your package
+mkdir mypackage && cd mypackage
+
+# 2. Initialise a sapphire.json
+sph init
+
+# 3. Write your package
+nano mypackage.sp
+
+# 4. Publish
+sph publish
 ```
-my-package/
-├── sapphire.json        ← required: package manifest
-├── mypackage.sp         ← main source file (referenced in sapphire.json)
-├── README.md            ← optional but strongly recommended
-└── examples/
-    └── demo.sp          ← optional usage examples
-```
+
+First time running `sph publish` you'll be prompted for your GitHub username and a personal access token.
 
 ---
 
 ## sapphire.json (Required)
-
-This file is read by `sph` to learn about your package.
 
 ```json
 {
@@ -38,123 +50,108 @@ This file is read by `sph` to learn about your package.
   "description": "A short description of what your package does",
   "main": "mypackage.sp",
   "author": "your-github-username",
-  "sapphire_version": ">=0.5.0",
-  "license": "MIT",
-  "repository": "https://github.com/your-username/sph-mypackage"
+  "sapphire_version": ">=0.5.3",
+  "license": "MIT"
 }
 ```
 
 ### Fields
 
-| Field              | Required | Description                                                  |
-|--------------------|----------|--------------------------------------------------------------|
+| Field              | Required | Description |
+|--------------------|----------|-------------|
 | `name`             | ✓        | Package name (lowercase, letters/digits/hyphens). This is what users type in `import`. |
-| `version`          | ✓        | Semver string, e.g. `"1.0.0"`                               |
-| `description`      | ✓        | One-line summary shown in `sph search`                       |
-| `main`             | ✓        | Relative path to the `.sp` file to install                   |
-| `author`           |          | Your GitHub username or name                                 |
-| `sapphire_version` |          | Minimum Sapphire version required, e.g. `">=0.5.0"`         |
-| `license`          |          | SPDX license identifier, e.g. `"MIT"`                       |
-| `repository`       |          | Full GitHub URL                                              |
+| `version`          | ✓        | Semver string, e.g. `"1.0.0"` |
+| `description`      | ✓        | One-line summary shown in `sph search` |
+| `main`             | ✓        | Relative path to the `.sp` file to publish |
+| `author`           |          | Your GitHub username |
+| `sapphire_version` |          | Minimum Sapphire version required |
+| `license`          |          | SPDX license identifier, e.g. `"MIT"` |
 
 ---
 
-## Writing Your .sp File
+## Writing Your Package
 
-Your package's public API is anything defined at the top level. Users will call these after importing.
+Functions defined at the top level of your `.sp` file become the package's public API. Users call them directly after importing — no dot notation needed.
 
 ```sapphire
 # mypackage.sp
 
 fn greet(name) {
-  return "Hello, " + name + " from mypackage!"
+  println("Hello, " + name + "!")
 }
 
-fn add(a, b) {
-  return a + b
+fn version() {
+  return "1.0.0"
 }
 ```
 
 Users install and use it like this:
 
 ```bash
-sph install your-username/sph-mypackage
+sph install yourname/mypackage
 ```
 
 ```sapphire
 import mypackage
 
-println(mypackage.greet("world"))
-println(mypackage.add(1, 2))
+greet("world")      # not mypackage.greet()
+println(version())  # not mypackage.version()
 ```
 
 Or import specific functions:
 
 ```sapphire
-from mypackage import greet, add
-
-println(greet("world"))
+from mypackage import greet
+greet("world")
 ```
+
+---
+
+## GitHub Token
+
+`sph publish` requires a GitHub personal access token with the **`repo`** scope.
+
+Create one at: **https://github.com/settings/tokens/new**
+
+- Token type: **Classic token** (not fine-grained)
+- Scope: check **`repo`** (full repository access)
+
+The token is saved to `~/.sapphire/auth.json` with owner-only permissions (`chmod 600`). To log out and clear it:
+
+```bash
+rm ~/.sapphire/auth.json
+```
+
+---
+
+## Encryption
+
+Packages installed via `sph install username/packagename` are automatically encrypted with AES-256-GCM on your machine. The key lives at `~/.sapphire/pkg.key` and is unique to your install. This prevents casual tampering — if a package file is modified, it will fail to load.
+
+This is transparent to users — they just `import` the package as normal.
 
 ---
 
 ## Naming Conventions
 
-- Repository names should be prefixed with `sph-` so they're easy to find: `sph-colors`, `sph-datetime-utils`
-- The `name` field in `sapphire.json` is what users type in `import` — keep it short and lowercase: `colors`, `datetime_utils`
-- Avoid names that clash with built-in stdlib packages (`math`, `strings`, `io`, `collections`, `test`, `datetime`, `http`, `json`, `dotenv`, `discordsph`)
+- Keep names short, lowercase, and descriptive: `colors`, `uuid`, `validate`
+- Avoid clashing with built-in packages: `math`, `strings`, `io`, `collections`, `test`, `datetime`, `http`, `json`, `dotenv`, `discordsph`, `media`, `colors`, `args`, `yml`, `csv`, `crypto`, `files`, `zip`, `env`, `sqlite`, `web`
 
 ---
 
-## Versioning and Releases
+## Versioning
 
 Use [semantic versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
 
 - **PATCH** — bug fixes, no API changes
-- **MINOR** — new functions added, backwards compatible
+- **MINOR** — new functions, backwards compatible
 - **MAJOR** — breaking changes
 
-To release a new version:
-
-1. Update `"version"` in `sapphire.json`
-2. Commit and push
-3. Create a GitHub release/tag: `v1.2.0`
-
-Users can install specific versions:
-
-```bash
-sph install your-username/sph-mypackage@v1.2.0
-```
+To release a new version, bump `"version"` in `sapphire.json` and run `sph publish` again.
 
 ---
 
-## Making Your Package Discoverable
-
-For your package to appear in `sph search`, your GitHub repository **must** have the topic `sapphire-package` added.
-
-To add it:
-1. Go to your repository on GitHub
-2. Click the ⚙️ gear icon next to "About" on the right sidebar
-3. Under "Topics", type `sapphire-package` and press Enter
-4. Save changes
-
-Your package will now appear when users run `sph search` or `sph search <keyword>`.
-
----
-
-## GitHub Token (Rate Limits)
-
-`sph search` uses the GitHub API. Unauthenticated requests are limited to 60/hour. To increase this, set a personal access token:
-
-```bash
-export GITHUB_TOKEN=your_token_here
-```
-
-Or add it to your shell profile. No special scopes are needed — a public-repo read token is sufficient.
-
----
-
-## Example: Minimal Package
+## Example: Complete Package
 
 **`sapphire.json`**
 ```json
@@ -172,30 +169,34 @@ Or add it to your shell profile. No special scopes are needed — a public-repo 
 fn red(s)    { return "\e[31m" + s + "\e[0m" }
 fn green(s)  { return "\e[32m" + s + "\e[0m" }
 fn yellow(s) { return "\e[33m" + s + "\e[0m" }
-fn blue(s)   { return "\e[34m" + s + "\e[0m" }
 fn bold(s)   { return "\e[1m"  + s + "\e[0m" }
+```
+
+**Publish:**
+```bash
+sph publish
 ```
 
 **Install:**
 ```bash
-sph install foxie/sph-colors
+sph install foxie/colors
 ```
 
 **Use:**
 ```sapphire
 import colors
-println(colors.red("Error!"))
-println(colors.green("Success!"))
+
+println(red("Error!"))
+println(green("Success!"))
+println(bold("Important"))
 ```
 
 ---
 
-## Checklist Before Publishing
+## Pre-publish Checklist
 
-- [ ] `sapphire.json` is present in the root with all required fields
-- [ ] `name` in `sapphire.json` is lowercase and doesn't clash with stdlib
+- [ ] `sapphire.json` present with all required fields
+- [ ] `name` is lowercase and doesn't clash with a built-in package
 - [ ] `main` points to a valid `.sp` file
-- [ ] Repository topic `sapphire-package` is set on GitHub
-- [ ] Repository is **public**
-- [ ] `README.md` explains what the package does and how to use it
-- [ ] Version is bumped and a GitHub release/tag is created
+- [ ] GitHub token has `repo` scope (classic token)
+- [ ] Version is bumped if updating an existing package
